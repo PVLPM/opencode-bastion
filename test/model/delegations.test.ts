@@ -156,6 +156,34 @@ describe("detectBeams", () => {
     ]);
   });
 
+  it("fires outward when a call hidden at hydration resolves its child id", () => {
+    const cases = [
+      ["streaming", call("tool-1", undefined, "streaming")],
+      ["running", call("tool-1", undefined, "running")],
+    ] as const;
+
+    for (const [, baselineCall] of cases) {
+      const baseline = calls(baselineCall);
+      const next = calls(call("tool-1", "ses-child", "running"));
+      const beams = detectBeams(baseline, baseline, next);
+
+      expect(beams).toStrictEqual([
+        { id: "out:ses-child:tool-1", sessionID: "ses-child", direction: "out" },
+      ]);
+      expect(detectBeams(baseline, next, next)).toStrictEqual([]);
+    }
+  });
+
+  it("fires outward when a hidden call resolves its child id while settling", () => {
+    const baseline = calls(call("tool-1", undefined, "streaming"));
+    const next = calls(call("tool-1", "ses-child", "completed"));
+
+    expect(detectBeams(baseline, baseline, next).map((beam) => beam.direction)).toStrictEqual([
+      "out",
+      "in",
+    ]);
+  });
+
   it("fires outward when a running call resolves its child id later", () => {
     const before = calls(call("tool-1", undefined, "running"));
     const next = calls(call("tool-1", "ses-child", "running"));

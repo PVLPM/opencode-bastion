@@ -123,14 +123,45 @@ const cases: readonly StatusCase[] = [
     errorKind: undefined,
   },
   {
-    name: "a stale info outcome is ignored without fresher evidence",
+    name: "the newer terminal timestamp wins over an older idle message",
+    input: statusInput({
+      info: makeSession({ outcome: "interrupted", idle: 300 }),
+      messages: [makeIdle("failed", undefined, 200)],
+    }),
+    status: "unknown",
+    detail: "Interrupted",
+    errorKind: undefined,
+  },
+  {
+    name: "an info outcome older than the latest assistant start is ignored",
     input: statusInput({
       info: makeSession({ outcome: "failed", idle: 100 }),
-      messages: [makeUser(200)],
+      messages: [makeAssistant({ created: 200 })],
     }),
     status: "unknown",
     detail: undefined,
     errorKind: undefined,
+  },
+  {
+    name: "a queued user after a failed assistant still fails",
+    input: statusInput({
+      messages: [
+        makeAssistant({ created: 10, error: makeError("secret", "ProviderAuthError") }),
+        makeUser(20),
+      ],
+    }),
+    status: "failed",
+    detail: undefined,
+    errorKind: "authentication",
+  },
+  {
+    name: "an assistant-only error yields failed",
+    input: statusInput({
+      messages: [makeAssistant({ created: 10, error: makeError("secret", "APIError") })],
+    }),
+    status: "failed",
+    detail: undefined,
+    errorKind: "provider error",
   },
   {
     name: "a failed rerun after a success with stale info reports failed",
@@ -192,7 +223,7 @@ const cases: readonly StatusCase[] = [
     errorKind: "context limit",
   },
   {
-    name: "an assistant error from before the latest user is not used",
+    name: "a queued user does not suppress the assistant error",
     input: statusInput({
       messages: [
         makeUser(100),
@@ -203,7 +234,7 @@ const cases: readonly StatusCase[] = [
     }),
     status: "failed",
     detail: undefined,
-    errorKind: undefined,
+    errorKind: "authentication",
   },
 ];
 

@@ -87,6 +87,13 @@ function scopeKey(anchor: Anchor): string {
   return `${anchor.serverID}\n${anchor.connected ? "on" : "off"}\n${anchor.rootID}`;
 }
 
+/** The SDK's location identity: directory plus workspace when present. */
+function locationKey(location: LocationRef): string {
+  return location.workspaceID === undefined
+    ? location.directory
+    : `${location.workspaceID}\n${location.directory}`;
+}
+
 function sessionInfo(data: FleetData, sessionID: string): SessionInfo | undefined {
   return data.session.get(sessionID);
 }
@@ -174,6 +181,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
   const lineRequests = new Map<string, number>();
   let lineRequestSequence = 0;
   let syncScope: string | undefined;
+  let activation = 0;
   let beamScope: string | undefined;
   let beamPrevious: ReadonlyMap<string, SubagentCall> | undefined;
   let pricesStarted = false;
@@ -200,6 +208,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
   onCleanup(clearBeams);
 
   function resetScope(): void {
+    activation += 1;
     synced.clear();
     setHydration(undefined);
     beamScope = undefined;
@@ -213,9 +222,14 @@ export function createFleetSource(host: FleetHost): FleetSource {
   function syncOnce(key: string, run: () => Promise<void>, done?: () => void): void {
     if (synced.has(key)) return;
     synced.add(key);
+    const startedAt = activation;
     run().then(
-      () => done?.(),
       () => {
+        if (activation !== startedAt) return;
+        done?.();
+      },
+      () => {
+        if (activation !== startedAt) return;
         synced.delete(key);
       },
     );
@@ -258,17 +272,21 @@ export function createFleetSource(host: FleetHost): FleetSource {
     const data = current.data;
     if (data.session.missing(current.rootID)) return;
 
-    syncOnce(`${scope}\nrouted`, () => data.session.sync(current.routedID));
+    syncOnce(`${scope}\nrouted\n${current.routedID}`, () => data.session.sync(current.routedID));
     syncOnce(`${scope}\nroot`, () => data.session.sync(current.rootID, { children: true }));
 
     const root = sessionInfo(data, current.rootID);
     if (root === undefined) return;
 
-    const location = root.location;
-    syncOnce(`${scope}\nagents\n${location.directory}`, () => data.location.agent.sync(location));
-    syncOnce(`${scope}\nmodels\n${location.directory}`, () => data.location.model.sync(location));
+    const members = [root, ...directChildren(data, current.rootID)];
+    const locations = new Map<string, LocationRef>();
+    for (const info of members) locations.set(locationKey(info.location), info.location);
+    for (const [key, location] of locations) {
+      syncOnce(`${scope}\nagents\n${key}`, () => data.location.agent.sync(location));
+      syncOnce(`${scope}\nmodels\n${key}`, () => data.location.model.sync(location));
+    }
 
-    for (const info of [root, ...directChildren(data, current.rootID)]) {
+    for (const info of members) {
       if (info.id === root.id) {
         syncOnce(
           `${scope}\nmessages\n${info.id}`,
@@ -309,7 +327,6 @@ export function createFleetSource(host: FleetHost): FleetSource {
     const current = family();
     if (current === undefined) return undefined;
     const data = current.data;
-    const location = current.root.location;
     const scope = scopeKey(current);
     const snapshot = (info: SessionInfo): SessionSnapshot => ({
       info,
@@ -333,7 +350,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
       descendants: current.descendants.map(costOnly),
       currentID: current.routedID,
       agentName: (info) => agentNameFor(data, info),
-      modelLabel: (ref) =>
+      modelLabel: (location, ref) =>
         ref === undefined
           ? undefined
           : {
@@ -341,7 +358,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
               modelID: ref.id,
               name: modelFor(data, location, ref)?.name ?? ref.id,
             },
-      contextLimit: (ref) =>
+      contextLimit: (location, ref) =>
         ref === undefined ? undefined : modelFor(data, location, ref)?.limit.context,
       price: (tokens, ref) => priceFor(prices(), tokens, ref),
       familyCost: data.session.cost(current.rootID),
@@ -375,14 +392,15 @@ export function createFleetSource(host: FleetHost): FleetSource {
       lineRequestSequence += 1;
       const request = lineRequestSequence;
       lineRequests.set(key, request);
+      const startedAt = activation;
       void current.session.server.client.session.diff({ sessionID: info.id }).then(
         (files) => {
-          if (lineRequests.get(key) !== request) return;
+          if (activation !== startedAt || lineRequests.get(key) !== request) return;
           lineRequests.delete(key);
           setLine(key, sumLines(files));
         },
         () => {
-          if (lineRequests.get(key) !== request) return;
+          if (activation !== startedAt || lineRequests.get(key) !== request) return;
           lineRequests.delete(key);
           setLine(key, undefined);
         },

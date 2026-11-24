@@ -3,7 +3,6 @@ import type {
   SessionMessageAssistant,
   SessionMessageIdle,
   SessionMessageInfo,
-  SessionMessageUser,
   SessionStructuredError,
 } from "@opencode/client/promise";
 
@@ -21,6 +20,13 @@ interface StatusResult {
   status: AgentStatus;
   detail: string | undefined;
   errorKind: ErrorKind | undefined;
+}
+
+type TerminalOutcome = SessionMessageIdle["outcome"];
+
+interface TerminalEvidence {
+  outcome: TerminalOutcome;
+  error: SessionStructuredError | undefined;
 }
 
 function latestAssistant(
@@ -41,24 +47,14 @@ function latestIdle(messages: readonly SessionMessageInfo[]): SessionMessageIdle
   return undefined;
 }
 
-function latestUser(messages: readonly SessionMessageInfo[]): SessionMessageUser | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message?.type === "user") return message;
-  }
-  return undefined;
-}
-
-/** The newest user or assistant start; anything older belongs to a previous execution. */
-function latestExecutionStart(messages: readonly SessionMessageInfo[]): number | undefined {
-  let latest: number | undefined;
-  for (const message of messages) {
-    if (message.type !== "user" && message.type !== "assistant") continue;
-    const created = message.time.created;
-    if (!Number.isFinite(created)) continue;
-    if (latest === undefined || created > latest) latest = created;
-  }
-  return latest;
+/**
+ * Execution boundary is the latest assistant start. Queued user messages can be
+ * inserted before delivery, so they must not move the boundary or hide an error.
+ */
+function latestAssistantStart(messages: readonly SessionMessageInfo[]): number | undefined {
+  const assistant = latestAssistant(messages);
+  if (assistant === undefined || !Number.isFinite(assistant.time.created)) return undefined;
+  return assistant.time.created;
 }
 
 /** Maps an SDK error type to a safe category; the raw message never reaches the UI. */
@@ -79,35 +75,56 @@ export function errorKindFor(error: SessionStructuredError): ErrorKind {
 function latestAssistantError(
   messages: readonly SessionMessageInfo[],
 ): SessionStructuredError | undefined {
-  const assistant = latestAssistant(messages);
-  if (assistant?.error === undefined) return undefined;
-  const user = latestUser(messages);
-  if (user !== undefined && assistant.time.created <= user.time.created) return undefined;
-  return assistant.error;
+  return latestAssistant(messages)?.error;
+}
+
+/** The newest terminal evidence that belongs to the latest execution, if any. */
+function terminalEvidence(input: StatusInput): TerminalEvidence | undefined {
+  const start = latestAssistantStart(input.messages);
+  const idle = latestIdle(input.messages);
+  const idleTime = idle?.time.created;
+  const idleEligible =
+    idle !== undefined && idleTime !== undefined && (start === undefined || idleTime >= start);
+  const infoTime = input.info.time.idle;
+  const infoEligible =
+    input.info.outcome !== undefined &&
+    (start === undefined || (infoTime !== undefined && infoTime >= start));
+
+  if (idleEligible && idle !== undefined && idleTime !== undefined) {
+    if (infoEligible && input.info.outcome !== undefined) {
+      if (infoTime !== undefined && infoTime > idleTime) {
+        return { outcome: input.info.outcome, error: undefined };
+      }
+    }
+    return { outcome: idle.outcome, error: idle.error };
+  }
+  if (infoEligible && input.info.outcome !== undefined) {
+    return { outcome: input.info.outcome, error: undefined };
+  }
+  return undefined;
+}
+
+function failed(error: SessionStructuredError | undefined): StatusResult {
+  return {
+    status: "failed",
+    detail: undefined,
+    errorKind: error === undefined ? undefined : errorKindFor(error),
+  };
 }
 
 function idleStatus(input: StatusInput): StatusResult {
-  const start = latestExecutionStart(input.messages);
-  const idle = latestIdle(input.messages);
-  const idleWins = idle !== undefined && (start === undefined || idle.time.created >= start);
-  const infoWins =
-    !idleWins &&
-    input.info.outcome !== undefined &&
-    (start === undefined || (input.info.time.idle !== undefined && input.info.time.idle >= start));
-  const outcome = idleWins ? idle.outcome : infoWins ? input.info.outcome : undefined;
-
-  if (outcome === "succeeded") return { status: "done", detail: undefined, errorKind: undefined };
-  if (outcome === "failed") {
-    const error = (idleWins ? idle.error : undefined) ?? latestAssistantError(input.messages);
-    return {
-      status: "failed",
-      detail: undefined,
-      errorKind: error === undefined ? undefined : errorKindFor(error),
-    };
+  const terminal = terminalEvidence(input);
+  if (terminal?.outcome === "succeeded") {
+    return { status: "done", detail: undefined, errorKind: undefined };
   }
-  if (outcome === "interrupted") {
+  if (terminal?.outcome === "failed") {
+    return failed(terminal.error ?? latestAssistantError(input.messages));
+  }
+  if (terminal?.outcome === "interrupted") {
     return { status: "unknown", detail: "Interrupted", errorKind: undefined };
   }
+  const error = latestAssistantError(input.messages);
+  if (error !== undefined) return failed(error);
   return { status: "unknown", detail: undefined, errorKind: undefined };
 }
 

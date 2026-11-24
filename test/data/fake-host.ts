@@ -2,6 +2,7 @@ import type {
   AgentInfo,
   FileDiffInfo,
   FormInfo,
+  LocationRef,
   ModelInfo,
   PermissionRequest,
   SessionInfo,
@@ -33,6 +34,8 @@ export interface FakeHostOptions {
   readonly messagesOnSync?: Readonly<Record<string, readonly SessionMessageInfo[]>>;
   readonly agents?: AgentInfo[];
   readonly models?: ModelInfo[];
+  readonly agentsByLocation?: Readonly<Record<string, AgentInfo[]>>;
+  readonly modelsByLocation?: Readonly<Record<string, ModelInfo[]>>;
   readonly diff?: (sessionID: string) => Promise<FileDiffInfo[]>;
   readonly prices?: () => Promise<PriceTable>;
   readonly sessionGate?: Promise<void>;
@@ -59,6 +62,11 @@ function afterGate(gate: Promise<void> | undefined, apply: () => void): Promise<
     return Promise.resolve();
   }
   return gate.then(apply);
+}
+
+function locationKey(ref: LocationRef | undefined): string {
+  if (ref === undefined) return "";
+  return ref.workspaceID === undefined ? ref.directory : `${ref.workspaceID}\n${ref.directory}`;
 }
 
 export function createFakeHost(options: FakeHostOptions = {}) {
@@ -99,6 +107,9 @@ export function createFakeHost(options: FakeHostOptions = {}) {
 
   const failSessionSyncs = new Set(options.failSessionSyncOnce ?? []);
   const failMessageSyncs = new Set(options.failMessageSyncOnce ?? []);
+  const messageHolds = new Map<string, { promise: Promise<void>; release: () => void }>();
+  const agentsByLocation = options.agentsByLocation ?? {};
+  const modelsByLocation = options.modelsByLocation ?? {};
 
   const sessionSyncs: { id: string; children: boolean }[] = [];
   const messageSyncs: string[] = [];
@@ -179,13 +190,19 @@ export function createFakeHost(options: FakeHostOptions = {}) {
           if (failMessageSyncs.delete(sessionID)) {
             return Promise.reject(new Error(`Failed to sync messages for ${sessionID}`));
           }
-          return afterGate(options.messageGate, () => {
+          const apply = () => {
             const onSync = options.messagesOnSync?.[sessionID];
             if (onSync !== undefined) {
               setMessages((current) => ({ ...current, [sessionID]: [...onSync] }));
             }
             load(sessionID);
-          });
+          };
+          const hold = messageHolds.get(sessionID);
+          if (hold !== undefined) {
+            messageHolds.delete(sessionID);
+            return hold.promise.then(apply);
+          }
+          return afterGate(options.messageGate, apply);
         },
       },
       permission: {
@@ -205,16 +222,16 @@ export function createFakeHost(options: FakeHostOptions = {}) {
     },
     location: {
       agent: {
-        list: () => agents(),
-        sync: () => {
-          agentSyncs.push("sync");
+        list: (ref) => agentsByLocation[locationKey(ref)] ?? agents(),
+        sync: (ref) => {
+          agentSyncs.push(locationKey(ref));
           return Promise.resolve();
         },
       },
       model: {
-        list: () => models(),
-        sync: () => {
-          modelSyncs.push("sync");
+        list: (ref) => modelsByLocation[locationKey(ref)] ?? models(),
+        sync: (ref) => {
+          modelSyncs.push(locationKey(ref));
           return Promise.resolve();
         },
       },
@@ -262,6 +279,14 @@ export function createFakeHost(options: FakeHostOptions = {}) {
     data,
     setRouted: (sessionID: string | undefined) => setRoutedID(sessionID),
     setConnected: (value: boolean) => setConnectedSignal(value),
+    holdNextMessageSync: (sessionID: string) => {
+      let release: () => void = () => undefined;
+      const promise = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      messageHolds.set(sessionID, { promise, release });
+      return release;
+    },
     addSession: (info: SessionInfo) => {
       remember(info);
       load(info.id);

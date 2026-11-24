@@ -95,7 +95,7 @@ describe("buildFleet", () => {
         ],
         model: { id: "session-model", providerID: "p" },
       }),
-      contextLimit: (ref) => (ref?.id === "assistant-model" ? 100 : 200),
+      contextLimit: (_location, ref) => (ref?.id === "assistant-model" ? 100 : 200),
     });
 
     expect(buildFleet(input).root.context).toStrictEqual({ used: 10, limit: 100 });

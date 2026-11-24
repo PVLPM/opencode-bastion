@@ -27,8 +27,8 @@ export interface FleetInput {
   descendants: SessionSnapshot[];
   currentID: string;
   agentName(info: SessionInfo): string;
-  modelLabel(ref?: ModelRef): ModelLabel | undefined;
-  contextLimit(ref?: ModelRef): number | undefined;
+  modelLabel(location: SessionInfo["location"], ref?: ModelRef): ModelLabel | undefined;
+  contextLimit(location: SessionInfo["location"], ref?: ModelRef): number | undefined;
   price(tokens: TokenUsageInfo, ref?: ModelRef): Money | undefined;
   /** Exact reported cost for the whole family, as the store already sums it. */
   familyCost: number;
@@ -98,7 +98,7 @@ function agentView(
     sessionID: snapshot.info.id,
     agent: input.agentName(snapshot.info),
     title: sessionTitle(snapshot.info.title),
-    model: input.modelLabel(snapshot.info.model),
+    model: input.modelLabel(snapshot.info.location, snapshot.info.model),
     status: derived.status,
     statusDetail: derived.detail,
     activity: deriveActivity(snapshot.messages, derived.status, derived.detail),
@@ -106,7 +106,9 @@ function agentView(
     startedAt: interval.startedAt,
     endedAt: interval.endedAt,
     cost: costs.get(snapshot.info.id),
-    context: contextUsage(snapshot.messages, input.contextLimit),
+    context: contextUsage(snapshot.messages, (ref) =>
+      input.contextLimit(snapshot.info.location, ref),
+    ),
     lines: snapshot.lines,
     errorKind: derived.errorKind,
     current: snapshot.info.id === input.currentID,

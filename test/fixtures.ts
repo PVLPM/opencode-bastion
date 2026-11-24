@@ -1,6 +1,7 @@
 // Synthetic SDK objects for model tests. Shapes mirror @opencode/client 2.4.1.
 import type {
   JsonValue,
+  ModelInfo,
   ModelRef,
   SessionInfo,
   SessionMessageAssistant,
@@ -43,6 +44,7 @@ export interface SessionValues {
   idle?: number;
   title?: string;
   model?: ModelRef;
+  location?: SessionInfo["location"];
 }
 
 export function makeSession(values: SessionValues = {}): SessionInfo {
@@ -55,7 +57,7 @@ export function makeSession(values: SessionValues = {}): SessionInfo {
     cost: values.cost ?? 0,
     tokens: values.tokens ?? makeTokens(),
     time,
-    location: { directory: "C:\\project" },
+    location: values.location ?? { directory: "C:\\project" },
   };
   if (values.parentID !== undefined) info.parentID = values.parentID;
   if (values.outcome !== undefined) info.outcome = values.outcome;
@@ -195,4 +197,30 @@ export function makeError(
   const error: SessionStructuredError = { type, message };
   if (status !== undefined) error.status = status;
   return error;
+}
+
+export interface ModelValues {
+  providerID?: string;
+  modelID?: string;
+  name?: string;
+  contextLimit?: number;
+}
+
+export function makeModel(values: ModelValues = {}): ModelInfo {
+  const providerID = values.providerID ?? "anthropic";
+  const modelID = values.modelID ?? "claude";
+  const context = values.contextLimit ?? 200_000;
+  return {
+    id: `${providerID}/${modelID}`,
+    modelID,
+    providerID,
+    name: values.name ?? modelID,
+    capabilities: { tools: true, input: ["text"], output: ["text"] },
+    variants: [],
+    time: { released: 0 },
+    cost: [{ input: 0, output: 0, cache: { read: 0, write: 0 } }],
+    status: "active",
+    enabled: true,
+    limit: { context, output: context },
+  };
 }

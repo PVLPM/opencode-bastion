@@ -10,7 +10,7 @@ import {
   type FleetSource,
 } from "../../src/data/fleet-source";
 import type { PriceTable } from "../../src/model/pricing";
-import { makeAssistant, makeSession, makeTokens, makeTool } from "../fixtures";
+import { makeAssistant, makeModel, makeSession, makeTokens, makeTool } from "../fixtures";
 import { createFakeHost } from "./fake-host";
 
 const flush = (): Promise<void> =>
@@ -163,6 +163,64 @@ describe("createFleetSource cold sessions", () => {
 });
 
 describe("createFleetSource syncing", () => {
+  it("syncing a routed child syncs the child's own info", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        { info: makeSession({ id: "ses-root" }) },
+        { info: makeSession({ id: "ses-child", parentID: "ses-root" }) },
+      ],
+    });
+
+    await withSource(fake.host, async () => {
+      await flush();
+      fake.setRouted("ses-child");
+      await flush();
+
+      expect(fake.calls.sessionSyncs).toContainEqual({ id: "ses-child", children: false });
+    });
+  });
+
+  it("ignores a sync completion from an activation before A→B→A", async () => {
+    const fake = createFakeHost({
+      routed: "ses-a",
+      sessions: [{ info: makeSession({ id: "ses-a" }) }, { info: makeSession({ id: "ses-b" }) }],
+    });
+    const releaseFirst = fake.holdNextMessageSync("ses-a");
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(fake.calls.messageSyncs).toContain("ses-a");
+
+      fake.setRouted("ses-b");
+      await flush();
+      const releaseReentry = fake.holdNextMessageSync("ses-a");
+      fake.setRouted("ses-a");
+      await flush();
+      expect(fake.calls.messageSyncs.filter((id) => id === "ses-a")).toHaveLength(2);
+
+      releaseFirst();
+      await flush();
+      fake.addMessage(
+        "ses-a",
+        makeAssistant({ content: [subagentCall("tool-live", "ses-child", "Live")] }),
+      );
+      await flush();
+      expect(source.beams()).toStrictEqual([]);
+
+      releaseReentry();
+      await flush();
+      await flush();
+      fake.addMessage(
+        "ses-a",
+        makeAssistant({ content: [subagentCall("tool-next", "ses-child", "Next")] }),
+      );
+      await flush();
+
+      expect(source.beams().filter((beam) => beam.direction === "out")).toHaveLength(1);
+    });
+  });
+
   it("re-syncs everything after a reconnect", async () => {
     const fake = createFakeHost({
       routed: "ses-root",
@@ -187,6 +245,51 @@ describe("createFleetSource syncing", () => {
       expect(fake.calls.sessionSyncs.filter((call) => call.children).length).toBe(
         childrenSyncs + 1,
       );
+    });
+  });
+
+  it("resolves each member's model limit from its own location", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root", location: { directory: "C:\\root" } }),
+          messages: [
+            makeAssistant({
+              tokens: makeTokens({ input: 10 }),
+              model: { id: "m", providerID: "p" },
+            }),
+          ],
+        },
+        {
+          info: makeSession({
+            id: "ses-child",
+            parentID: "ses-root",
+            created: 2,
+            location: { directory: "C:\\child" },
+          }),
+          status: "running",
+          messages: [
+            makeAssistant({
+              tokens: makeTokens({ input: 20 }),
+              model: { id: "m", providerID: "p" },
+            }),
+          ],
+        },
+      ],
+      modelsByLocation: {
+        "C:\\root": [makeModel({ providerID: "p", modelID: "m", contextLimit: 1_000 })],
+        "C:\\child": [makeModel({ providerID: "p", modelID: "m", contextLimit: 200 })],
+      },
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+
+      expect(source.fleet()?.root.context).toStrictEqual({ used: 10, limit: 1_000 });
+      expect(source.fleet()?.active[0]?.context).toStrictEqual({ used: 20, limit: 200 });
+      expect([...new Set(fake.calls.modelSyncs)]).toHaveLength(2);
+      expect([...new Set(fake.calls.agentSyncs)]).toHaveLength(2);
     });
   });
 
@@ -262,6 +365,38 @@ describe("createFleetSource beams", () => {
       const inward = source.beams().filter((beam) => beam.direction === "in");
       expect(inward).toHaveLength(1);
       expect(inward[0]?.sessionID).toBe("ses-child");
+    });
+  });
+
+  it("beams when a delegation hidden at hydration resolves its child id", async () => {
+    const hidden = makeTool({
+      id: "tool-1",
+      name: "subagent",
+      status: "streaming",
+      text: "{}",
+    });
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root" }),
+          messages: [makeAssistant({ content: [hidden] })],
+        },
+      ],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(source.beams()).toStrictEqual([]);
+
+      fake.addMessages("ses-root", [
+        makeAssistant({ content: [subagentCall("tool-1", "ses-child", "Live")] }),
+      ]);
+      await flush();
+
+      const outward = source.beams().filter((beam) => beam.direction === "out");
+      expect(outward).toHaveLength(1);
+      expect(outward[0]?.sessionID).toBe("ses-child");
     });
   });
 

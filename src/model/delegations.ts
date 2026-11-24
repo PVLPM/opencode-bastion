@@ -67,9 +67,14 @@ export function detectBeams(
   for (const [toolID, call] of next) {
     if (call.childID === undefined) continue;
     const before = previous.get(toolID);
+    const baselineCall = baseline.get(toolID);
+    const hiddenAtBaseline = baselineCall?.childID === undefined;
     const fresh =
       before === undefined || before.status !== "running" || before.childID === undefined;
-    if (call.status === "running" && call.childID !== undefined && !baseline.has(toolID) && fresh) {
+    const becameVisible =
+      call.status === "running" ||
+      (baselineCall !== undefined && baselineCall.childID === undefined);
+    if (call.childID !== undefined && hiddenAtBaseline && fresh && becameVisible) {
       beams.push({
         id: `out:${call.childID}:${toolID}`,
         sessionID: call.childID,

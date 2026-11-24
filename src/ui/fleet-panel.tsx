@@ -143,10 +143,7 @@ export function FleetPanel(props: FleetPanelProps) {
                   <span class="bn-sep" aria-hidden="true">
                     ·
                   </span>
-                  <span
-                    class="bn-head__cost"
-                    title="Reported plus estimated cost for this session's family"
-                  >
+                  <span class="bn-head__cost" title="Known family cost">
                     {formatMoney(cost())}
                   </span>
                 </>
