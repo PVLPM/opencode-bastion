@@ -15,6 +15,12 @@ moonshotai, openai, opencode, openrouter, xai and zai.
   text color instead of carrying brand colors.
 - A provider without a mark here gets no logo; Bastion never substitutes a
   generic placeholder.
+- `claude-agent.svg` is not on models.dev (it serves a generic fallback for that
+  id). It is the `claude-agent` symbol from OpenCode Desktop 2.4.1's provider
+  icon sprite (`out/renderer/assets/sprite-*.svg`), unchanged apart from the
+  `<symbol>` wrapper becoming `<svg>`, so the Claude Agent provider shows the
+  same Claude mark the host shows, and the Anthropic API keeps the Anthropic
+  mark. The artwork is under `OPENCODE-MIT.txt`.
 
 # Soft Radar
 

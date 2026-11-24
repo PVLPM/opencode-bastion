@@ -2,6 +2,7 @@ import { Show } from "solid-js";
 
 import amazonBedrock from "./logos/amazon-bedrock.svg?raw";
 import anthropic from "./logos/anthropic.svg?raw";
+import claudeAgent from "./logos/claude-agent.svg?raw";
 import deepseek from "./logos/deepseek.svg?raw";
 import githubCopilot from "./logos/github-copilot.svg?raw";
 import google from "./logos/google.svg?raw";
@@ -43,6 +44,8 @@ function logoSvg(providerID: string): string | undefined {
       return amazonBedrock;
     case "anthropic":
       return anthropic;
+    case "claude-agent":
+      return claudeAgent;
     case "deepseek":
       return deepseek;
     case "github-copilot":
