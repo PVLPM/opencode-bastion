@@ -13,6 +13,7 @@ import { createFleetSource } from "./data/fleet-source";
 import type { PriceTable } from "./model/pricing";
 import { FleetPanel } from "./ui/fleet-panel";
 import { pillView } from "./ui/pill";
+import radar from "./ui/radar.css?inline";
 import styles from "./ui/styles.css?inline";
 
 const PANEL_ID = "fleet";
@@ -40,7 +41,7 @@ export default Plugin.define({
     });
     const openFleet = () => revealFleet(ctx, ctx.sessions.current());
 
-    ctx.add(Style, styles);
+    ctx.add(Style, `${radar}\n${styles}`);
 
     ctx.add(ComposerPill, {
       id: "agent-status",

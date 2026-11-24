@@ -2,6 +2,7 @@ import { For, Show, createSignal, onCleanup, onMount } from "solid-js";
 import { render } from "solid-js/web";
 
 import "./tokens.css";
+import "../src/ui/radar.css";
 import "../src/ui/styles.css";
 import "./preview.css";
 
@@ -14,8 +15,10 @@ import {
   longNamesFleet,
   now,
   parallelFleet,
+  repeatedFleet,
   rootOnlyFleet,
   singleAgentFleet,
+  statusesFleet,
   waitingFleet,
 } from "./fixtures";
 import { ui } from "./ui";
@@ -88,6 +91,20 @@ const scenes: readonly Scene[] = [
     title: "Parallel agents",
     note: "three running, one waiting for permission",
     fleet: parallelFleet,
+    closed: [],
+  },
+  {
+    id: "repeated",
+    title: "Repeated agent names",
+    note: "two Fixers and two Explorers stay separate cards; effort shows when known",
+    fleet: repeatedFleet,
+    closed: [],
+  },
+  {
+    id: "statuses",
+    title: "Every status",
+    note: "running radar, waiting and failed dots, done check, unknown ring",
+    fleet: statusesFleet,
     closed: [],
   },
   {
@@ -246,8 +263,17 @@ function Gallery(props: { onOpen: (sessionID: string) => void }) {
   );
 }
 
-const reducedAtStart = new URLSearchParams(window.location.search).get("motion") === "reduce";
+const query = new URLSearchParams(window.location.search);
+const reducedAtStart = query.get("motion") === "reduce";
 if (reducedAtStart) document.documentElement.dataset.motion = "reduce";
+
+const [scheme, setScheme] = createSignal(query.get("theme") === "light" ? "light" : "dark");
+document.documentElement.dataset.colorScheme = scheme();
+const toggleScheme = () => {
+  const next = scheme() === "dark" ? "light" : "dark";
+  setScheme(next);
+  document.documentElement.dataset.colorScheme = next;
+};
 
 const [reduced, setReduced] = createSignal(reducedAtStart);
 const [epoch, setEpoch] = createSignal(1);
@@ -272,12 +298,17 @@ render(
       <header class="pv-bar">
         <div>
           <h1>Agent Fleet</h1>
-          <p>OpenCode Desktop dark tokens · narrow 320 and wide 560 · Task 3 visual check</p>
+          <p>
+            OpenCode Desktop 2.4 v2 tokens · narrow 320 and wide 560 · ?theme=light, ?motion=reduce
+          </p>
         </div>
         <div class="pv-bar__tools">
           <span>
             {opened() === undefined ? "Click a card to open its session" : `Open: ${opened()}`}
           </span>
+          <button class="pv-action" type="button" onClick={toggleScheme}>
+            {scheme() === "dark" ? "Light theme" : "Dark theme"}
+          </button>
           <button class="pv-action" type="button" onClick={toggleMotion}>
             {reduced() ? "Use full motion" : "Reduce motion"}
           </button>

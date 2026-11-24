@@ -156,6 +156,71 @@ describe("FleetPanel", () => {
     );
   });
 
+  it("lays a collapsed card out in exactly three rows", () => {
+    const fleet = testFleet(testRoot(), [
+      runningChild({
+        task: "Fix recovery regressions",
+        activity: "Running tests…",
+        effort: "medium",
+        lines: { added: 12, removed: 3 },
+      }),
+    ]);
+    const card = mountPanel({ fleet }).querySelector('[data-bn-card="ses_child_a"]');
+    const rows = [...(card?.querySelectorAll(".bn-card__body > .bn-row") ?? [])];
+
+    expect(rows).toHaveLength(3);
+    expect(rows[0]?.querySelector(".bn-badge")?.textContent).toBe("Fixer");
+    expect(rows[0]?.querySelector(".bn-title")?.textContent).toBe("Fix the failing test");
+    expect(rows[1]?.textContent).toBe("Fix recovery regressions•Running tests…");
+    expect(rows[2]?.querySelector(".bn-model__name")?.textContent).toBe("Opus 5.5");
+    expect(rows[2]?.querySelector(".bn-model__effort")?.textContent).toBe("#Medium");
+    expect(rows[2]?.querySelector(".bn-lines")?.textContent).toBe("+12−3");
+  });
+
+  it.each([
+    [
+      "task and activity",
+      { task: "Fix it", activity: "Running tests…" },
+      1,
+      "Fix it•Running tests…",
+    ],
+    ["only a task", { task: "Fix it", activity: undefined }, 0, "Fix it"],
+    ["only an activity", { task: undefined, activity: "Running tests…" }, 0, "Running tests…"],
+    ["a finished task", { task: "Fix it", status: "done", endedAt: TEST_NOW }, 0, "Fix it"],
+  ] as const)("separates task and activity only when both exist: %s", (_name, init, separators, text) => {
+    const fleet = testFleet(testRoot(), [runningChild(init)]);
+    const row = mountPanel({ fleet }).querySelector('[data-bn-card="ses_child_a"] .bn-row--work');
+
+    expect(row?.querySelectorAll(".bn-sep")).toHaveLength(separators);
+    expect(row?.textContent).toBe(text);
+  });
+
+  it.each([
+    ["running", ".bn-radar", "Running"],
+    ["waiting", ".bn-mark__dot", "Needs you: Waiting for permission"],
+    ["failed", ".bn-mark__dot", "Failed: rate limit"],
+    ["done", '[data-icon="check-small"]', "Done"],
+    ["unknown", ".bn-mark__ring", "Unknown: Interrupted"],
+  ] as const)("marks a %s agent with its native glyph and a label", (status, glyph, label) => {
+    const detail =
+      status === "waiting"
+        ? "Waiting for permission"
+        : status === "unknown"
+          ? "Interrupted"
+          : undefined;
+    const fleet = testFleet(testRoot(), [
+      runningChild({
+        status,
+        statusDetail: detail,
+        errorKind: status === "failed" ? "rate limit" : undefined,
+      }),
+    ]);
+    const mark = mountPanel({ fleet }).querySelector('[data-bn-card="ses_child_a"] .bn-mark');
+
+    expect(mark?.getAttribute("aria-label")).toBe(label);
+    expect(mark?.querySelector(glyph)).not.toBeNull();
+  });
+
   it("links inactive agents with a quiet wire", () => {
     const host = mountPanel({ fleet: fleetWithFinished() });
     const wire = host.querySelector('[data-bn-wire="ses_child_done"]');

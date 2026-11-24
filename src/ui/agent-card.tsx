@@ -1,11 +1,12 @@
-import { Show, createSignal } from "solid-js";
+import { Show, createSignal, type JSX } from "solid-js";
 
 import type { AgentView } from "../model/types";
 import type { Ui } from "@opencode/plugin/gui";
-import { ContextRing } from "./context-ring";
-import { formatClock, formatElapsed, formatMoney, formatTokens } from "../model/format";
+import { ContextRing, contextSummary } from "./context-ring";
+import { formatClock, formatElapsed, formatMoney } from "../model/format";
 import { ProviderLogo } from "./provider-logo";
-import { statusIcon, statusLabel } from "./status";
+import { StatusMark } from "./status-mark";
+import { statusLabel } from "./status";
 import { ActivityTicker } from "./ticker";
 
 export interface AgentCardProps {
@@ -14,61 +15,78 @@ export interface AgentCardProps {
   readonly inactive: boolean;
   readonly now: number;
   readonly openable: boolean;
-  readonly ui: Pick<Ui, "Icon">;
+  readonly animate: boolean;
+  readonly ui: Pick<Ui, "Icon" | "Tooltip">;
   readonly onOpen: (sessionID: string) => void;
 }
 
-function visibleLine(agent: AgentView): string | undefined {
+/**
+ * What the agent is doing right now, distinct from its task: the live tool
+ * description while it runs, what blocks it while it waits, the safe failure
+ * category once it failed. Finished work has no current activity.
+ */
+function activityLine(agent: AgentView): string | undefined {
   switch (agent.status) {
     case "running":
-      return agent.activity ?? agent.statusDetail;
+      return agent.activity;
     case "waiting":
-      // What the session is blocked on matters more than its last activity.
       return agent.statusDetail ?? agent.activity;
     case "failed":
-      return agent.errorKind === undefined
-        ? (agent.statusDetail ?? agent.activity)
-        : `Failed: ${agent.errorKind}`;
+      return agent.errorKind === undefined ? agent.statusDetail : `Failed: ${agent.errorKind}`;
     case "unknown":
-      return agent.statusDetail ?? agent.task ?? agent.activity;
+      return agent.statusDetail;
     case "done":
-      return agent.task ?? agent.activity;
+      return undefined;
   }
+}
+
+function effortLabel(effort: string): string {
+  return `#${effort.charAt(0).toUpperCase()}${effort.slice(1)}`;
 }
 
 function detailsID(sessionID: string): string {
   return `bn-details-${encodeURIComponent(sessionID)}`;
 }
 
-function contextText(context: { used: number; limit: number }): string {
-  if (context.limit <= 0) return `${formatTokens(context.used)} tokens`;
-  const percent = Math.min(100, Math.round((context.used / context.limit) * 100));
-  return `${percent}% · ${formatTokens(context.used)} of ${formatTokens(context.limit)}`;
+function Detail(props: { label: string; tone?: string; children: JSX.Element }) {
+  return (
+    <div class="bn-dl__row">
+      <dt>{props.label}</dt>
+      <dd data-tone={props.tone}>{props.children}</dd>
+    </div>
+  );
 }
 
 export function AgentCard(props: AgentCardProps) {
   const [expanded, setExpanded] = createSignal(false);
   const Icon = props.ui.Icon;
+  const Tooltip = props.ui.Tooltip;
 
+  const live = () => props.agent.status === "running" || props.agent.status === "waiting";
   const elapsed = () =>
-    formatElapsed(
-      props.agent.startedAt,
-      props.agent.endedAt,
-      props.now,
-      props.agent.status === "running" || props.agent.status === "waiting",
-    );
-  const detailsFor = () => detailsID(props.agent.sessionID);
-  const openable = () => props.openable;
+    formatElapsed(props.agent.startedAt, props.agent.endedAt, props.now, live());
+  const activity = () => activityLine(props.agent);
+  const changed = () => {
+    const lines = props.agent.lines;
+    return lines !== undefined && (lines.added > 0 || lines.removed > 0) ? lines : undefined;
+  };
+
+  const open = () => {
+    if (props.openable) props.onOpen(props.agent.sessionID);
+  };
+
+  // Marks and metrics sit above the full-card button so their tooltips work;
+  // a click on them still opens the session like the rest of the card.
+  const forward = (event: MouseEvent) => {
+    if (event.target instanceof Element && event.target.closest("button, .bn-card__details"))
+      return;
+    open();
+  };
 
   const openLabel = () => {
     const agent = props.agent;
-    const subject = agent.title === undefined ? agent.agent : `${agent.agent} — ${agent.title}`;
+    const subject = agent.title === undefined ? agent.agent : `${agent.agent}, ${agent.title}`;
     return `Open ${subject}, ${statusLabel(agent.status)}`;
-  };
-
-  const detailsLabel = () => {
-    const action = expanded() ? "Hide" : "Show";
-    return `${action} details for ${props.agent.agent}`;
   };
 
   return (
@@ -78,7 +96,7 @@ export function AgentCard(props: AgentCardProps) {
       data-inactive={props.inactive ? "true" : undefined}
       data-current={props.agent.current ? "true" : undefined}
       data-status={props.agent.status}
-      data-openable={openable() ? "true" : "false"}
+      data-openable={props.openable ? "true" : "false"}
       data-bn-anchor={props.agent.sessionID}
       data-bn-waiting={props.agent.status === "waiting" ? "true" : undefined}
       data-bn-card={props.agent.sessionID}
@@ -87,189 +105,151 @@ export function AgentCard(props: AgentCardProps) {
         class="bn-card__open"
         type="button"
         data-bn-open="true"
-        disabled={!openable()}
+        disabled={!props.openable}
         aria-label={openLabel()}
         aria-current={props.agent.current ? "true" : undefined}
-        onClick={() => props.onOpen(props.agent.sessionID)}
+        onClick={open}
       />
-      <div class="bn-card__body">
-        <div class="bn-card__title">
-          <ProviderLogo providerID={props.agent.model?.providerID} />
-          <div class="bn-card__identity">
-            <span class="bn-card__name" title={props.agent.agent}>
-              {props.agent.agent}
-            </span>
-            <Show when={props.agent.title}>
-              {(title) => (
-                <>
-                  <span class="bn-card__dot" aria-hidden="true">
-                    •
-                  </span>
-                  <span class="bn-card__session" title={title()}>
-                    {title()}
-                  </span>
-                </>
-              )}
-            </Show>
-          </div>
-          <span class="bn-chip" data-tone={props.agent.status}>
-            <Show
-              when={props.agent.status === "running"}
-              fallback={<Icon name={statusIcon(props.agent.status)} class="bn-chip__icon" />}
-            >
-              <span class="bn-spin" aria-hidden="true" />
-            </Show>
-            <span>{statusLabel(props.agent.status)}</span>
+      <div class="bn-card__body" onClick={forward}>
+        <div class="bn-row bn-row--head">
+          <span class="bn-badge">{props.agent.agent}</span>
+          <Show when={props.agent.title}>{(title) => <span class="bn-title">{title()}</span>}</Show>
+          <span class="bn-card__mark">
+            <StatusMark agent={props.agent} ui={props.ui} />
           </span>
         </div>
 
-        <div class="bn-card__live" data-tone={props.agent.status}>
-          <ActivityTicker text={visibleLine(props.agent)} live={props.agent.status === "running"} />
+        <div class="bn-row bn-row--work" data-tone={props.agent.status}>
+          <Show when={props.agent.task}>{(task) => <span class="bn-task">{task()}</span>}</Show>
+          <Show when={props.agent.task !== undefined && activity() !== undefined}>
+            <span class="bn-sep" aria-hidden="true">
+              •
+            </span>
+          </Show>
+          <ActivityTicker text={activity()} animate={props.animate} />
+        </div>
+
+        <div class="bn-row bn-row--meta">
           <Show when={props.agent.model}>
             {(model) => (
-              <span class="bn-card__model" title={model().name}>
-                {model().name}
+              <span class="bn-model">
+                <ProviderLogo providerID={model().providerID} />
+                <span class="bn-model__name">{model().name}</span>
+                <Show when={props.agent.effort}>
+                  {(effort) => <span class="bn-model__effort">{effortLabel(effort())}</span>}
+                </Show>
               </span>
             )}
           </Show>
-        </div>
-
-        <div class="bn-card__foot">
           <span class="bn-metrics">
-            <Show when={props.agent.cost}>
-              {(cost) => (
+            <Show when={changed()}>
+              {(lines) => (
                 <span
-                  class="bn-metrics__item"
-                  title={cost().estimated ? "Estimated at API list price" : undefined}
+                  class="bn-lines"
+                  aria-label={`${lines().added} lines added, ${lines().removed} removed`}
                 >
-                  {formatMoney(cost())}
+                  <span class="bn-lines__add">+{lines().added}</span>
+                  <span class="bn-lines__del">−{lines().removed}</span>
                 </span>
               )}
             </Show>
-            <Show when={elapsed()}>
-              {(duration) => <span class="bn-metrics__item">{duration()}</span>}
-            </Show>
-            <Show when={props.agent.lines}>
-              {(lines) => (
-                <Show when={lines().added > 0 || lines().removed > 0}>
-                  <span class="bn-metrics__item bn-diff">
-                    <span class="bn-add">+{lines().added}</span>
-                    <span class="bn-del">−{lines().removed}</span>
-                  </span>
+            <Show when={elapsed()}>{(duration) => <span>{duration()}</span>}</Show>
+            <Show when={props.agent.cost}>
+              {(cost) => (
+                <Show when={cost().estimated} fallback={<span>{formatMoney(cost())}</span>}>
+                  <Tooltip value="Estimated at API list price">
+                    <span class="bn-metrics__tip">{formatMoney(cost())}</span>
+                  </Tooltip>
                 </Show>
               )}
             </Show>
-          </span>
-          <span class="bn-card__aside">
             <Show when={props.agent.context}>
-              {(context) => <ContextRing context={context()} />}
+              {(context) => (
+                <Show when={contextSummary(context())}>
+                  {(summary) => (
+                    <Tooltip value={`Context ${summary()}`}>
+                      <span class="bn-metrics__tip">
+                        <ContextRing context={context()} />
+                      </span>
+                    </Tooltip>
+                  )}
+                </Show>
+              )}
             </Show>
             <button
               class="bn-more"
               type="button"
               data-bn-more="true"
               aria-expanded={expanded()}
-              aria-controls={detailsFor()}
-              aria-label={detailsLabel()}
-              onClick={() => setExpanded((open) => !open)}
+              aria-controls={detailsID(props.agent.sessionID)}
+              aria-label={`${expanded() ? "Hide" : "Show"} details for ${props.agent.agent}`}
+              onClick={() => setExpanded((value) => !value)}
             >
-              <Icon name="chevron-down" class="bn-more__chevron" />
+              <Icon name="chevron-down" size="small" class="bn-more__chevron" />
             </button>
           </span>
         </div>
 
         <Show when={expanded()}>
-          <div class="bn-card__details" id={detailsFor()}>
-            <dl class="bn-dl">
-              <Show when={props.agent.task}>
-                {(task) => (
-                  <div class="bn-dl__row">
-                    <dt>Task</dt>
-                    <dd class="bn-dl__task">{task()}</dd>
-                  </div>
-                )}
-              </Show>
-              <Show when={props.agent.model}>
-                {(model) => (
-                  <div class="bn-dl__row">
-                    <dt>Model</dt>
-                    <dd>{model().name}</dd>
-                  </div>
-                )}
-              </Show>
-              <Show when={props.agent.startedAt}>
-                {(started) => (
-                  <div class="bn-dl__row">
-                    <dt>Started</dt>
-                    <dd>{formatClock(started())}</dd>
-                  </div>
-                )}
-              </Show>
-              <Show when={props.agent.endedAt}>
-                {(ended) => (
-                  <div class="bn-dl__row">
-                    <dt>Ended</dt>
-                    <dd>{formatClock(ended())}</dd>
-                  </div>
-                )}
-              </Show>
-              <Show when={elapsed()}>
-                {(duration) => (
-                  <div class="bn-dl__row">
-                    <dt>Duration</dt>
-                    <dd>{duration()}</dd>
-                  </div>
-                )}
-              </Show>
-              <Show when={props.agent.activity}>
-                {(activity) => (
-                  <div class="bn-dl__row">
-                    <dt>Activity</dt>
-                    <dd>{activity()}</dd>
-                  </div>
-                )}
-              </Show>
-              <Show when={props.agent.statusDetail}>
-                {(detail) => (
-                  <div class="bn-dl__row">
-                    <dt>{props.agent.status === "waiting" ? "Waiting" : "Status"}</dt>
-                    <dd class={props.agent.status === "waiting" ? "bn-dl__waiting" : undefined}>
-                      {detail()}
-                    </dd>
-                  </div>
-                )}
-              </Show>
-              <Show when={props.agent.context}>
-                {(context) => (
-                  <div class="bn-dl__row">
-                    <dt>Context</dt>
-                    <dd>{contextText(context())}</dd>
-                  </div>
-                )}
-              </Show>
-              <Show when={props.agent.cost}>
-                {(cost) => (
-                  <div class="bn-dl__row">
-                    <dt>Cost</dt>
-                    <dd>
-                      {formatMoney(cost())}
-                      <Show when={cost().estimated}>
-                        <span class="bn-dl__note"> · estimated at list price</span>
-                      </Show>
-                    </dd>
-                  </div>
-                )}
-              </Show>
-              <Show when={props.agent.errorKind}>
-                {(kind) => (
-                  <div class="bn-dl__row">
-                    <dt>Error</dt>
-                    <dd class="bn-dl__error">Failed: {kind()}</dd>
-                  </div>
-                )}
-              </Show>
-            </dl>
-          </div>
+          <dl class="bn-card__details bn-dl" id={detailsID(props.agent.sessionID)}>
+            <Show when={props.agent.title}>
+              {(title) => <Detail label="Session">{title()}</Detail>}
+            </Show>
+            <Show when={props.agent.task}>
+              {(task) => (
+                <Detail label="Task">
+                  <span class="bn-dl__task">{task()}</span>
+                </Detail>
+              )}
+            </Show>
+            <Show when={activity()}>
+              {(line) => (
+                <Detail label="Now" tone={props.agent.status}>
+                  {line()}
+                </Detail>
+              )}
+            </Show>
+            <Show when={props.agent.model}>
+              {(model) => (
+                <Detail label="Model">
+                  {model().name}
+                  <Show when={props.agent.effort}>{(effort) => ` ${effortLabel(effort())}`}</Show>
+                </Detail>
+              )}
+            </Show>
+            <Show when={props.agent.startedAt}>
+              {(started) => (
+                <Detail label="Time">
+                  {formatClock(started())}
+                  <Show when={props.agent.endedAt}>{(ended) => ` – ${formatClock(ended())}`}</Show>
+                  <Show when={elapsed()}>{(duration) => ` · ${duration()}`}</Show>
+                </Detail>
+              )}
+            </Show>
+            <Show when={props.agent.context}>
+              {(context) => (
+                <Show when={contextSummary(context())}>
+                  {(summary) => <Detail label="Context">{summary()}</Detail>}
+                </Show>
+              )}
+            </Show>
+            <Show when={props.agent.cost}>
+              {(cost) => (
+                <Detail label="Cost">
+                  {formatMoney(cost())}
+                  <Show when={cost().estimated}> · estimated at list price</Show>
+                </Detail>
+              )}
+            </Show>
+            <Show when={changed()}>
+              {(lines) => (
+                <Detail label="Lines">
+                  <span class="bn-lines__add">+{lines().added}</span>{" "}
+                  <span class="bn-lines__del">−{lines().removed}</span>
+                </Detail>
+              )}
+            </Show>
+          </dl>
         </Show>
       </div>
     </article>

@@ -3,14 +3,22 @@ import { Show } from "solid-js";
 import type { ContextUsage } from "../model/types";
 import { formatTokens } from "../model/format";
 
-const SIZE = 15;
+const SIZE = 14;
 const STROKE = 2;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
+/** "31% · 62.4k of 200k", or undefined when the limit is unknown. */
+export function contextSummary(context: ContextUsage): string | undefined {
+  if (context.limit <= 0) return undefined;
+  const percent = Math.round(Math.min(100, (Math.max(0, context.used) / context.limit) * 100));
+  return `${percent}% · ${formatTokens(context.used)} of ${formatTokens(context.limit)}`;
+}
+
 /**
- * Context load of the latest assistant message. Nothing renders when the limit
- * is unknown or zero, so a card never shows an invented percentage.
+ * Context load of the latest assistant message as a compact ring; the numbers
+ * live in its label and the card's details. Nothing renders when the limit is
+ * unknown or zero, so a card never shows an invented percentage.
  */
 export function ContextRing(props: { context: ContextUsage }) {
   const percent = () => {
@@ -46,12 +54,12 @@ export function ContextRing(props: { context: ContextUsage }) {
               r={RADIUS}
               fill="none"
               stroke-width={STROKE}
+              stroke-linecap="round"
               stroke-dasharray={`${CIRCUMFERENCE} ${CIRCUMFERENCE}`}
               stroke-dashoffset={CIRCUMFERENCE * (1 - value() / 100)}
               transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
             />
           </svg>
-          <span class="bn-ring__pct">{Math.round(value())}%</span>
         </span>
       )}
     </Show>

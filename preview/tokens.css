@@ -15,40 +15,66 @@
 }
 
 /*
- * The dark values OpenCode Desktop injects at runtime, read from the installed
- * renderer stylesheet. Only the tokens the panel uses are mirrored here.
+ * The v2 tokens OpenCode Desktop 2.4.1 ships (renderer main stylesheet), light
+ * and dark, resolved to literals. Only the tokens the panel reads are mirrored;
+ * the host sets the scheme as `data-color-scheme` on the root element.
  */
 :root {
-  color-scheme: dark;
-
-  --background-base: #101010;
-  --background-stronger: #151515;
-
-  --surface-base: #ffffff08;
-  --surface-base-hover: #ffffff0a;
-  --surface-raised-base: #ffffff0f;
-  --surface-raised-base-hover: #ffffff14;
-
-  --text-base: #ffffff9e;
-  --text-weak: #ffffff6c;
-  --text-weaker: #ffffff48;
-  --text-strong: #ffffffef;
-  --text-interactive-base: #9dbefe;
-
-  --border-weak-base: #282828;
-  --border-weaker-base: #202020;
-  --border-weak-selected: #034cff9e;
-
-  --icon-success-base: #12c905;
-  --icon-warning-base: #fbb73c;
-  --icon-critical-base: #fc533a;
-
-  --text-diff-add-base: #9bcd97;
-  --text-diff-delete-base: #fc533a;
-
   --font-family-sans:
     "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-size-base: 14px;
-  --font-size-small: 13px;
-  --letter-spacing-tight: -0.16px;
+  --v2-font-family-sans: var(--font-family-sans);
+}
+
+:root[data-color-scheme="light"] {
+  color-scheme: light;
+  --v2-background-bg-base: #fff;
+  --v2-background-bg-deep: #fafafa;
+  --v2-background-bg-layer-01: #fafafa;
+  --v2-background-bg-layer-02: #f2f2f2;
+  --v2-text-text-base: #161616;
+  --v2-text-text-muted: #5c5c5c;
+  --v2-text-text-faint: #808080;
+  --v2-icon-icon-base: #3a3a3a;
+  --v2-icon-icon-muted: #808080;
+  --v2-icon-icon-faint: #aeaeae;
+  --v2-icon-icon-accent: #3b5cf6;
+  --v2-border-border-muted: #00000014;
+  --v2-border-border-base: #0000001a;
+  --v2-border-border-strong: #0003;
+  --v2-border-border-focus: #7698fd;
+  --v2-overlay-simple-overlay-hover: #0000000a;
+  --v2-overlay-simple-overlay-pressed: #00000014;
+  --v2-state-fg-success: #198b43;
+  --v2-state-fg-warning: #cb9f34;
+  --v2-state-fg-danger: #b82d35;
+  --v2-elevation-raised:
+    0px 2px 4px 0px #0000000a, 0px 1px 2px -1px #00000014, 0px 0px 0px 0.5px #0000001f,
+    0px 0px 0px 0px #0000;
+}
+
+:root[data-color-scheme="dark"] {
+  color-scheme: dark;
+  --v2-background-bg-base: #161616;
+  --v2-background-bg-deep: #080808;
+  --v2-background-bg-layer-01: #242424;
+  --v2-background-bg-layer-02: #2e2e2e;
+  --v2-text-text-base: #fafafa;
+  --v2-text-text-muted: #aeaeae;
+  --v2-text-text-faint: #808080;
+  --v2-icon-icon-base: #dbdbdb;
+  --v2-icon-icon-muted: #808080;
+  --v2-icon-icon-faint: #5c5c5c;
+  --v2-icon-icon-accent: #a2bcff;
+  --v2-border-border-muted: #ffffff14;
+  --v2-border-border-base: #ffffff1a;
+  --v2-border-border-strong: #fff3;
+  --v2-border-border-focus: #a2bcff;
+  --v2-overlay-simple-overlay-hover: #ffffff0f;
+  --v2-overlay-simple-overlay-pressed: #ffffff1a;
+  --v2-state-fg-success: #6bd586;
+  --v2-state-fg-warning: #f2cf76;
+  --v2-state-fg-danger: #f17471;
+  --v2-elevation-raised:
+    0px 2px 4px 0px #0000004d, 0px 1px 2px 0px #0000004d, 0px 0px 0px 0.5px #ffffff29,
+    0px -0.5px 0px 0px #ffffff0f;
 }

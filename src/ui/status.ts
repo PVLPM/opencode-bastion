@@ -1,5 +1,4 @@
-import type { AgentStatus } from "../model/types";
-import type { IconName } from "@opencode/plugin/gui";
+import type { AgentStatus, AgentView } from "../model/types";
 
 const STATUS_LABEL = {
   running: "Running",
@@ -9,19 +8,15 @@ const STATUS_LABEL = {
   unknown: "Unknown",
 } satisfies Record<AgentStatus, string>;
 
-const STATUS_ICON = {
-  running: "sessions-stack",
-  waiting: "circle-exclamation",
-  done: "check-small",
-  failed: "circle-x",
-  unknown: "dash",
-} satisfies Record<AgentStatus, IconName>;
-
 export function statusLabel(status: AgentStatus): string {
   return STATUS_LABEL[status];
 }
 
-/** The glyph shown beside a status; Running draws its own spinner instead. */
-export function statusIcon(status: AgentStatus): IconName {
-  return STATUS_ICON[status];
+/** The status with its reason when OpenCode gives one, e.g. "Needs you: Waiting for permission". */
+export function statusTip(agent: AgentView): string {
+  const label = statusLabel(agent.status);
+  if (agent.status === "failed" && agent.errorKind !== undefined)
+    return `${label}: ${agent.errorKind}`;
+  if (agent.statusDetail === undefined || agent.statusDetail === label) return label;
+  return `${label}: ${agent.statusDetail}`;
 }

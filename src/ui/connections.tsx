@@ -12,17 +12,14 @@ interface RowWire {
 }
 
 interface Geometry {
-  readonly nodeX: number;
-  readonly nodeY: number;
   readonly spine: string;
   readonly spineTail: string | undefined;
   readonly rows: readonly RowWire[];
   readonly bySession: ReadonlyMap<string, RowWire>;
 }
 
-const SPINE_X = 9.5;
-const NODE_GAP = 6;
-const CORNER = 4;
+const SPINE_X = 10.5;
+const CORNER = 6;
 
 function branch(x: number, y: number, cardLeft: number): string {
   return `M ${x} ${y - CORNER} Q ${x} ${y} ${x + CORNER} ${y} H ${cardLeft - 1}`;
@@ -41,8 +38,9 @@ function reverse(x: number, from: number, to: number, cardLeft: number): string 
 }
 
 /**
- * Blue elbow lines from the orchestrator to each card, plus a marker that
- * travels along one on an observed delegation or result. Geometry is measured
+ * Quiet elbow lines from the orchestrator to each card (live ones a step
+ * brighter), plus a marker that travels along one only on an observed
+ * delegation or result; nothing here loops. Geometry is measured
  * from the rendered cards, so indentation and wrapping never desynchronize the
  * wires from the list.
  */
@@ -62,7 +60,7 @@ export function Connections(props: {
     const root = host.querySelector('[data-bn-anchor][data-kind="root"]');
     if (!(root instanceof HTMLElement)) return;
 
-    const nodeY = Math.round(root.getBoundingClientRect().bottom - hostRect.top) + NODE_GAP + 0.5;
+    const nodeY = Math.round(root.getBoundingClientRect().bottom - hostRect.top);
     const rows: RowWire[] = [];
     const bySession = new Map<string, RowWire>();
 
@@ -92,8 +90,6 @@ export function Connections(props: {
     }
     const lastActive = rows.findLast((row) => !row.inactive)?.centerY ?? nodeY;
     setGeometry({
-      nodeX: SPINE_X,
-      nodeY,
       spine: `M ${SPINE_X} ${nodeY} V ${lastActive}`,
       spineTail:
         last.centerY > lastActive ? `M ${SPINE_X} ${lastActive} V ${last.centerY}` : undefined,
@@ -122,7 +118,6 @@ export function Connections(props: {
       {(measured) => (
         <div class="bn-wires" aria-hidden="true">
           <svg class="bn-wires__svg">
-            <circle class="bn-node" cx={measured().nodeX} cy={measured().nodeY} r="2.4" />
             <path class="bn-wire" d={measured().spine} />
             <Show when={measured().spineTail}>
               {(tail) => <path class="bn-wire bn-wire--quiet" d={tail()} />}
