@@ -12,7 +12,7 @@ import { createSignal } from "solid-js";
 import type { FleetData, FleetHost, FleetSession } from "../../src/data/fleet-source";
 import type { PriceTable } from "../../src/model/pricing";
 
-export interface FakeSession {
+interface FakeSession {
   readonly info: SessionInfo;
   readonly messages?: readonly SessionMessageInfo[];
   readonly permissions?: readonly PermissionRequest[];

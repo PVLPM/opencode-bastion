@@ -8,3 +8,5 @@ coverage/
 .superpowers/
 .omo/
 .slim/
+preview/fonts/
+preview/.screens/

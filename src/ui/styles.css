@@ -1,0 +1,887 @@
+/*
+ * Agent Fleet panel. Every color comes from OpenCode's theme tokens with a
+ * dark-safe fallback; the panel also inherits light themes by construction.
+ * Classes are namespaced `bn-` so nothing leaks into the host UI.
+ */
+.bn-panel,
+.bn-panel *,
+.bn-panel *::before,
+.bn-panel *::after {
+  box-sizing: border-box;
+}
+
+.bn-panel {
+  --bn-fg: var(--text-base, #ffffff9e);
+  --bn-strong: var(--text-strong, #ffffffef);
+  --bn-weak: var(--text-weak, #ffffff6c);
+  --bn-faint: var(--text-weaker, #ffffff48);
+  --bn-accent: var(--text-interactive-base, #9dbefe);
+  --bn-warn: var(--icon-warning-base, #fbb73c);
+  --bn-danger: var(--icon-critical-base, #fc533a);
+  --bn-ok: var(--icon-success-base, #12c905);
+  --bn-add: var(--text-diff-add-base, #9bcd97);
+  --bn-del: var(--text-diff-delete-base, #fc533a);
+  --bn-raised: var(--surface-raised-base, #ffffff0f);
+  --bn-raised-hover: var(--surface-raised-base-hover, #ffffff14);
+  --bn-flat: var(--surface-base, #ffffff08);
+  --bn-flat-hover: var(--surface-base-hover, #ffffff0a);
+  --bn-line: var(--border-weak-base, #282828);
+  --bn-line-quiet: var(--border-weaker-base, #202020);
+  --bn-selected: var(--border-weak-selected, #034cff9e);
+  --bn-wire: color-mix(in srgb, var(--bn-accent) 70%, transparent);
+  --bn-icon-size: 12px;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 10px 12px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  color: var(--bn-fg);
+  font-family: var(--font-family-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0;
+}
+
+.bn-panel button {
+  appearance: none;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+.bn-panel svg {
+  display: block;
+}
+
+/* Header ------------------------------------------------------------------ */
+.bn-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  padding: 0 2px 10px;
+}
+
+.bn-head__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--bn-strong);
+  font-size: 12.5px;
+  font-weight: 530;
+  letter-spacing: var(--letter-spacing-tight, -0.16px);
+}
+
+.bn-head__icon {
+  width: var(--bn-icon-size);
+  height: var(--bn-icon-size);
+  color: var(--bn-weak);
+}
+
+.bn-head__stats {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  color: var(--bn-weak);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bn-head__cost {
+  color: var(--bn-fg);
+}
+
+.bn-sep {
+  padding: 0 4px;
+  color: var(--bn-faint);
+}
+
+.bn-needs {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--bn-warn) 28%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bn-warn) 10%, transparent);
+  color: var(--bn-warn);
+  font-size: 10px;
+  font-weight: 530;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.bn-needs::after {
+  content: "";
+  position: absolute;
+  inset: -3px 0;
+}
+
+.bn-needs:hover {
+  border-color: color-mix(in srgb, var(--bn-warn) 44%, transparent);
+  background: color-mix(in srgb, var(--bn-warn) 16%, transparent);
+}
+
+.bn-needs:focus-visible {
+  outline: 2px solid var(--bn-selected);
+  outline-offset: 1px;
+}
+
+.bn-needs__icon,
+.bn-needs__arrow {
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+
+.bn-needs__arrow {
+  opacity: 0.7;
+}
+
+.bn-empty {
+  margin: 2px 2px 0;
+  color: var(--bn-faint);
+  font-size: 11.5px;
+}
+
+/* Tree -------------------------------------------------------------------- */
+.bn-tree {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+
+.bn-branch {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding-inline-start: 28px;
+}
+
+.bn-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 18px;
+  margin: 7px 0 0;
+}
+
+.bn-group__label {
+  color: var(--bn-weak);
+  font-size: 10.5px;
+  font-weight: 530;
+}
+
+.bn-group__count {
+  color: var(--bn-faint);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bn-group__rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--bn-line-quiet);
+}
+
+/* Wires ------------------------------------------------------------------- */
+.bn-wires {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.bn-wires__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.bn-wire {
+  fill: none;
+  stroke: var(--bn-wire);
+  stroke-width: 1;
+}
+
+.bn-node {
+  fill: var(--bn-accent);
+  opacity: 0.9;
+}
+
+.bn-beam {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--bn-accent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--bn-accent) 26%, transparent),
+    0 0 8px 1px color-mix(in srgb, var(--bn-accent) 48%, transparent);
+  offset-path: var(--bn-beam-path);
+  offset-anchor: 50% 50%;
+  offset-rotate: 0deg;
+  offset-distance: 0%;
+  animation: bn-beam-travel 720ms cubic-bezier(0.4, 0.5, 0.2, 1) forwards;
+}
+
+@keyframes bn-beam-travel {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+/* Card -------------------------------------------------------------------- */
+.bn-card {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  padding: 8px 9px 7px;
+  border: 1px solid var(--bn-line-quiet);
+  border-radius: 8px;
+  background: var(--bn-flat);
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    opacity 120ms ease;
+}
+
+.bn-card[data-kind="root"] {
+  padding: 9px 10px 8px;
+  border-color: var(--bn-line);
+  border-radius: 9px;
+  background: var(--bn-raised);
+}
+
+.bn-card:hover:has(.bn-card__open:not(:disabled)) {
+  background: var(--bn-flat-hover);
+}
+
+.bn-card[data-kind="root"]:hover:has(.bn-card__open:not(:disabled)) {
+  background: var(--bn-raised-hover);
+}
+
+.bn-card[data-current="true"] {
+  border-color: var(--bn-selected);
+}
+
+.bn-card[data-inactive="true"] {
+  opacity: 0.74;
+  background: transparent;
+}
+
+.bn-card[data-inactive="true"]:hover,
+.bn-card[data-inactive="true"]:has(.bn-card__open:focus-visible),
+.bn-card[data-inactive="true"]:has(.bn-more:focus-visible),
+.bn-card[data-inactive="true"]:has(.bn-more[aria-expanded="true"]) {
+  opacity: 1;
+}
+
+.bn-card[data-inactive="true"][data-status="failed"] {
+  opacity: 1;
+}
+
+.bn-card[data-openable="false"] {
+  cursor: default;
+}
+
+.bn-card__open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  padding: 0;
+  border-radius: inherit;
+  cursor: pointer;
+}
+
+.bn-card__open:disabled {
+  cursor: default;
+}
+
+.bn-card__open:focus-visible {
+  outline: 2px solid var(--bn-selected);
+  outline-offset: -2px;
+}
+
+.bn-card__body {
+  position: relative;
+  min-width: 0;
+}
+
+.bn-card__title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  height: 18px;
+}
+
+.bn-logo {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  color: var(--bn-weak);
+}
+
+.bn-logo__glyph,
+.bn-logo__glyph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.bn-card[data-inactive="true"] .bn-logo {
+  opacity: 0.55;
+}
+
+.bn-card__name {
+  flex: 0 1 auto;
+  max-width: 44%;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--bn-strong);
+  font-size: 12.5px;
+  font-weight: 530;
+  letter-spacing: var(--letter-spacing-tight, -0.16px);
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bn-card[data-kind="root"] .bn-card__name {
+  font-size: 13px;
+}
+
+.bn-card[data-inactive="true"] .bn-card__name {
+  color: var(--bn-fg);
+  font-weight: 500;
+}
+
+.bn-card__dot {
+  flex: none;
+  color: var(--bn-faint);
+  font-size: 10px;
+}
+
+.bn-card__session {
+  flex: 1 1 0;
+  min-width: 52px;
+  overflow: hidden;
+  color: var(--bn-weak);
+  font-size: 11.5px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bn-card[data-inactive="true"] .bn-card__session {
+  color: var(--bn-faint);
+}
+
+/* Status chip ------------------------------------------------------------- */
+.bn-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  margin-inline-start: auto;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 530;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.bn-chip__icon {
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+
+.bn-chip[data-tone="running"] {
+  border-color: color-mix(in srgb, var(--bn-accent) 26%, transparent);
+  background: color-mix(in srgb, var(--bn-accent) 9%, transparent);
+  color: var(--bn-accent);
+}
+
+.bn-chip[data-tone="waiting"] {
+  border-color: color-mix(in srgb, var(--bn-warn) 30%, transparent);
+  background: color-mix(in srgb, var(--bn-warn) 10%, transparent);
+  color: var(--bn-warn);
+}
+
+.bn-chip[data-tone="failed"] {
+  border-color: color-mix(in srgb, var(--bn-danger) 30%, transparent);
+  background: color-mix(in srgb, var(--bn-danger) 9%, transparent);
+  color: var(--bn-danger);
+}
+
+.bn-chip[data-tone="done"] {
+  border-color: var(--bn-line-quiet);
+  color: var(--bn-weak);
+}
+
+.bn-chip[data-tone="unknown"] {
+  border-color: var(--bn-line-quiet);
+  color: var(--bn-faint);
+}
+
+.bn-spin {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1.25px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  opacity: 0.9;
+  animation: bn-spin 0.9s linear infinite;
+}
+
+@keyframes bn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Activity line ----------------------------------------------------------- */
+.bn-card__live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 16px;
+  margin-top: 3px;
+}
+
+.bn-card__live[data-tone="waiting"] .bn-ticker {
+  color: color-mix(in srgb, var(--bn-warn) 76%, var(--bn-fg));
+}
+
+.bn-card__live[data-tone="failed"] .bn-ticker {
+  color: color-mix(in srgb, var(--bn-danger) 84%, var(--bn-fg));
+}
+
+.bn-card__model {
+  flex: none;
+  max-width: 46%;
+  overflow: hidden;
+  color: var(--bn-faint);
+  font-size: 10.5px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bn-ticker {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 16px;
+  overflow: hidden;
+  color: var(--bn-fg);
+  font-size: 11.5px;
+  line-height: 16px;
+}
+
+.bn-ticker__line {
+  position: relative;
+  display: block;
+  height: 16px;
+  white-space: nowrap;
+}
+
+.bn-ticker__line[data-enter="true"] {
+  animation: bn-ticker-in 190ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.bn-ticker__prev {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  animation: bn-ticker-out 170ms cubic-bezier(0.3, 0.7, 0.2, 1) forwards;
+}
+
+.bn-ticker__text {
+  display: block;
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bn-ticker__shine {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background-image: linear-gradient(100deg, transparent 41%, var(--bn-strong) 50%, transparent 59%);
+  background-position: 140% 0;
+  background-repeat: no-repeat;
+  background-size: 260% 100%;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: bn-scan 2.8s linear infinite;
+}
+
+@keyframes bn-ticker-in {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes bn-ticker-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes bn-scan {
+  from {
+    background-position: 140% 0;
+  }
+  to {
+    background-position: -40% 0;
+  }
+}
+
+/* Card footer ------------------------------------------------------------- */
+.bn-card__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 18px;
+  margin-top: 3px;
+}
+
+.bn-metrics {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--bn-weak);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bn-metrics__item + .bn-metrics__item::before {
+  content: "·";
+  padding: 0 4px;
+  color: var(--bn-faint);
+}
+
+.bn-diff {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.bn-add {
+  color: var(--bn-add);
+}
+
+.bn-del {
+  color: var(--bn-del);
+}
+
+.bn-card[data-inactive="true"] .bn-metrics {
+  color: var(--bn-faint);
+}
+
+.bn-card__aside {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+
+.bn-ring {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--bn-weak);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.bn-ring__track {
+  stroke: color-mix(in srgb, var(--bn-weak) 28%, transparent);
+}
+
+.bn-ring__value {
+  stroke: var(--bn-accent);
+  transition: stroke-dashoffset 240ms ease;
+}
+
+.bn-ring[data-level="high"] .bn-ring__value {
+  stroke: var(--bn-warn);
+}
+
+.bn-ring[data-level="high"] {
+  color: var(--bn-warn);
+}
+
+.bn-ring__pct {
+  line-height: 1;
+}
+
+.bn-more {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-block: -3px;
+  border-radius: 5px;
+  color: var(--bn-faint);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.bn-more:hover {
+  background: var(--bn-flat-hover);
+  color: var(--bn-fg);
+}
+
+.bn-more:focus-visible {
+  outline: 1.5px solid var(--bn-selected);
+  outline-offset: 1px;
+}
+
+.bn-more__chevron {
+  width: 12px;
+  height: 12px;
+  transition: transform 140ms ease;
+}
+
+.bn-more[aria-expanded="true"] .bn-more__chevron {
+  transform: rotate(180deg);
+}
+
+/* Details ----------------------------------------------------------------- */
+.bn-card__details {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bn-line-quiet);
+  animation: bn-details-in 140ms ease-out;
+}
+
+@keyframes bn-details-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.bn-dl {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 3px 8px;
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 14px;
+}
+
+.bn-dl__row {
+  display: contents;
+}
+
+.bn-dl dt {
+  color: var(--bn-faint);
+  font-weight: 440;
+}
+
+.bn-dl dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--bn-fg);
+  overflow-wrap: anywhere;
+}
+
+.bn-dl__task {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.bn-dl__waiting {
+  color: var(--bn-warn);
+}
+
+.bn-dl__error {
+  color: var(--bn-danger);
+}
+
+.bn-dl__note {
+  color: var(--bn-faint);
+}
+
+/* Timeline ---------------------------------------------------------------- */
+.bn-timeline {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bn-line-quiet);
+}
+
+.bn-timeline__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  color: var(--bn-faint);
+  font-size: 10px;
+  letter-spacing: 0.01em;
+}
+
+.bn-timeline__total {
+  font-variant-numeric: tabular-nums;
+}
+
+.bn-timeline__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bn-timeline__row {
+  position: relative;
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bn-fg) 9%, transparent);
+}
+
+.bn-timeline__bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+  border-radius: 999px;
+  background: var(--bn-weak);
+}
+
+.bn-timeline__bar[data-status="running"] {
+  background: var(--bn-accent);
+}
+
+.bn-timeline__bar[data-status="waiting"] {
+  background: var(--bn-warn);
+}
+
+.bn-timeline__bar[data-status="failed"] {
+  background: var(--bn-danger);
+}
+
+.bn-timeline__bar[data-status="done"] {
+  background: var(--bn-ok);
+  opacity: 0.6;
+}
+
+.bn-timeline__bar[data-status="unknown"] {
+  background: var(--bn-faint);
+}
+
+.bn-timeline__bar[data-inactive="true"] {
+  opacity: 0.5;
+}
+
+/* Reduced motion ---------------------------------------------------------- */
+/*
+ * The host exposes the same choice as `data-motion="reduce"`; the media query
+ * covers a system setting. Both stop the ticker slide, the scan, the spinner
+ * and beams without changing layout, and the panel does not render beams at all
+ * when it mounts with motion reduced.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .bn-panel,
+  .bn-panel *,
+  .bn-panel *::before,
+  .bn-panel *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .bn-ticker__prev,
+  .bn-beam,
+  .bn-ticker__shine {
+    display: none;
+  }
+}
+
+:root[data-motion="reduce"] .bn-panel,
+:root[data-motion="reduce"] .bn-panel *,
+:root[data-motion="reduce"] .bn-panel *::before,
+:root[data-motion="reduce"] .bn-panel *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+:root[data-motion="reduce"] .bn-ticker__prev,
+:root[data-motion="reduce"] .bn-beam,
+:root[data-motion="reduce"] .bn-ticker__shine {
+  display: none;
+}

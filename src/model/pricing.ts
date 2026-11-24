@@ -3,7 +3,7 @@ import type { TokenUsageInfo } from "@opencode/client/promise";
 import type { Money } from "./types";
 import { tokenTotal } from "./usage";
 
-export interface PriceCost {
+interface PriceCost {
   input: number;
   output: number;
   cache_read?: number;

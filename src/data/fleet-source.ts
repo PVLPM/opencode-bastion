@@ -31,7 +31,7 @@ export interface FleetData {
   };
 }
 
-export interface FleetServer {
+interface FleetServer {
   readonly id: string;
   readonly connected: boolean;
   readonly data: FleetData;
