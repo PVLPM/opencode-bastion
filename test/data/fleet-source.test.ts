@@ -321,6 +321,23 @@ describe("createFleetSource syncing", () => {
     });
   });
 
+  it("derives a new child before its permissions are synced", async () => {
+    // Regression: the store returns undefined permissions until synced; reading
+    // `.length` threw inside a plugin-root effect and the host failed the plugin.
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }) }],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      fake.addSession(makeSession({ id: "ses-child", parentID: "ses-root", created: 2 }));
+      fake.setStatus("ses-child", "running");
+
+      expect(source.fleet()?.active.map((agent) => agent.status)).toStrictEqual(["running"]);
+    });
+  });
+
   it("retries a failed sync on the next store change", async () => {
     const fake = createFakeHost({
       routed: "ses-root",

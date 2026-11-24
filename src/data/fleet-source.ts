@@ -3,6 +3,7 @@ import type {
   LocationRef,
   ModelInfo,
   ModelRef,
+  PermissionRequest,
   SessionInfo,
   SessionMessageInfo,
   TokenUsageInfo,
@@ -25,7 +26,13 @@ export interface FleetData {
     /** The host store returns undefined for a session it has not loaded yet. */
     get(sessionID: string): SessionInfo | undefined;
     readonly message: Pick<Data["session"]["message"], "list" | "sync">;
-    readonly permission: Pick<Data["session"]["permission"], "list" | "sync">;
+    readonly permission: Pick<Data["session"]["permission"], "sync"> & {
+      /**
+       * Typed as an array by the SDK, but the store returns `store.session.permission[id]`,
+       * which stays undefined until that session's permissions are synced.
+       */
+      list(sessionID: string): PermissionRequest[] | undefined;
+    };
     readonly form: Pick<Data["session"]["form"], "list" | "sync">;
   };
   readonly location: {
@@ -334,7 +341,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
       info,
       running: data.session.status(info.id) === "running",
       messages: data.session.message.list(info.id),
-      permissions: data.session.permission.list(info.id).length,
+      permissions: data.session.permission.list(info.id)?.length ?? 0,
       forms: data.session.form.list(info.id, info.location)?.length ?? 0,
       lines: lines().get(`${scope}\n${info.id}`),
     });

@@ -206,7 +206,8 @@ export function createFakeHost(options: FakeHostOptions = {}) {
         },
       },
       permission: {
-        list: (sessionID) => (isLoaded(sessionID) ? (permissions()[sessionID] ?? []) : []),
+        // Mirrors the real store: undefined until the session's permissions are synced.
+        list: (sessionID) => permissions()[sessionID],
         sync: (sessionID) => {
           permissionSyncs.push(sessionID);
           return Promise.resolve();
