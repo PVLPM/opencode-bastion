@@ -14,6 +14,13 @@ export default defineConfig({
     passWithNoTests: true,
     projects: [
       {
+        resolve: {
+          conditions: ["browser", "development"],
+          alias: [
+            { find: /^solid-js$/u, replacement: solidDev },
+            { find: /^solid-js\/web$/u, replacement: solidWebDev },
+          ],
+        },
         test: {
           name: "model",
           environment: "node",
