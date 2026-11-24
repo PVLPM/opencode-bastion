@@ -24,7 +24,8 @@ function inputText(
 export function firstLine(text: string | undefined): string | undefined {
   if (text === undefined) return undefined;
   for (const line of text.split(/\r?\n/u)) {
-    const trimmed = line.trim();
+    // Prompts are markdown; a heading or quote marker is syntax, not task text.
+    const trimmed = line.trim().replace(/^(?:#{1,6}|>)\s+/u, "");
     if (trimmed !== "") return trimmed;
   }
   return undefined;

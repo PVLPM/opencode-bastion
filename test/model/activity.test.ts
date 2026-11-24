@@ -1,8 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveActivity } from "../../src/model/activity";
+import { deriveActivity, firstLine } from "../../src/model/activity";
 import type { AgentStatus } from "../../src/model/types";
 import { makeAssistant, makeError, makeTool } from "../fixtures";
+
+describe("firstLine", () => {
+  it.each([
+    ["\n\n  Ship it  \nmore", "Ship it"],
+    ["# Agent Fleet — redesign\nbody", "Agent Fleet — redesign"],
+    ["### Plan", "Plan"],
+    ["> quoted ask", "quoted ask"],
+    ["#hashtag stays", "#hashtag stays"],
+    ["  \n ", undefined],
+  ])("%j → %j", (text, expected) => {
+    expect(firstLine(text)).toBe(expected);
+  });
+});
 
 function running(tools: Parameters<typeof makeTool>[0], status: AgentStatus = "running") {
   return deriveActivity([makeAssistant({ content: [makeTool(tools)] })], status, undefined);
