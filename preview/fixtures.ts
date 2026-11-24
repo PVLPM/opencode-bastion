@@ -114,7 +114,12 @@ const LIVE_ACTIVITIES = [
  * The live scene's cards, in step with `liveLanes`: the Writer finishes and is
  * followed up, and the orchestrator is idle between the turns its lane shows.
  */
-export function liveFleet(startedAt: number, step: number, now: number): FleetView {
+export function liveFleet(
+  startedAt: number,
+  step: number,
+  now: number,
+  addedCents: number,
+): FleetView {
   const activity = LIVE_ACTIVITIES[step % LIVE_ACTIVITIES.length] ?? "Thinking…";
   const nextActivity = LIVE_ACTIVITIES[(step + 1) % LIVE_ACTIVITIES.length] ?? "Thinking…";
   const elapsed = (now - startedAt) / 1000;
@@ -138,7 +143,7 @@ export function liveFleet(startedAt: number, step: number, now: number): FleetVi
       activity: rootIdleSince === undefined ? "Delegating to Writer" : undefined,
       startedAt: startedAt - 72_000,
       endedAt: rootIdleSince === undefined ? undefined : startedAt + rootIdleSince * 1000,
-      cost: money(0.42),
+      cost: money((42 + addedCents) / 100),
       context: { used: 62_400, limit: 200_000 },
       lines: lines(18, 4),
     }),
@@ -858,6 +863,7 @@ const SESSION_CALLS: readonly HandoffSpec[] = [
   { childID: "ses_long_deploy", at: -318, block: 0 },
   { childID: "ses_long_review", at: -140, block: 0 },
   { childID: "ses_long_fixer_b", at: -30, block: 1 },
+  { childID: "ses_long_fixer_b", at: -20, block: 1 },
 ];
 
 export function sessionLanes(): LanesView {

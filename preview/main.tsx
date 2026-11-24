@@ -187,8 +187,10 @@ function Panes(props: { scene: Scene; onOpen: (sessionID: string) => void }) {
 }
 
 function LivePanes(props: { onOpen: (sessionID: string) => void }) {
+  const manualClock = new URLSearchParams(window.location.search).get("clock") === "manual";
   const [startedAt, setStartedAt] = createSignal(Date.now());
   const [step, setStep] = createSignal(0);
+  const [addedCents, setAddedCents] = createSignal(0);
   const [nowValue, setNowValue] = createSignal(Date.now());
   const [beams, setBeams] = createSignal<readonly Beam[]>([]);
   const timers: ReturnType<typeof setInterval>[] = [];
@@ -207,6 +209,7 @@ function LivePanes(props: { onOpen: (sessionID: string) => void }) {
   };
 
   onMount(() => {
+    if (manualClock) return;
     timers.push(setInterval(() => setNowValue(Date.now()), 1000));
     timers.push(setInterval(() => setStep((value) => value + 1), 2200));
     timers.push(setInterval(() => fire("out"), 3800));
@@ -230,7 +233,7 @@ function LivePanes(props: { onOpen: (sessionID: string) => void }) {
       <div class="pv-panes">
         <Frame
           width={320}
-          fleet={liveFleet(startedAt(), step(), nowValue())}
+          fleet={liveFleet(startedAt(), step(), nowValue(), addedCents())}
           lanes={liveLanes(startedAt(), nowValue())}
           beams={beams()}
           now={nowValue()}
@@ -240,7 +243,7 @@ function LivePanes(props: { onOpen: (sessionID: string) => void }) {
         />
         <Frame
           width={560}
-          fleet={liveFleet(startedAt(), step(), nowValue())}
+          fleet={liveFleet(startedAt(), step(), nowValue(), addedCents())}
           lanes={liveLanes(startedAt(), nowValue())}
           beams={beams()}
           now={nowValue()}
@@ -250,8 +253,20 @@ function LivePanes(props: { onOpen: (sessionID: string) => void }) {
         />
       </div>
       <div class="pv-controls">
+        <Show when={manualClock}>
+          <button
+            class="pv-action"
+            type="button"
+            onClick={() => setNowValue((value) => value + 1000)}
+          >
+            Advance 1 s
+          </button>
+        </Show>
         <button class="pv-action" type="button" onClick={() => setStep((value) => value + 1)}>
           Next activity
+        </button>
+        <button class="pv-action" type="button" onClick={() => setAddedCents((value) => value + 5)}>
+          Add $0.05
         </button>
         <button class="pv-action" type="button" onClick={() => fire("out")}>
           Delegation →

@@ -27,6 +27,8 @@
 
 :root[data-color-scheme="light"] {
   color-scheme: light;
+  --v2-yellow-1100: #68552b;
+  --v2-green-900: #1d783c;
   --v2-background-bg-base: #fff;
   --v2-background-bg-deep: #fafafa;
   --v2-background-bg-layer-01: #fafafa;

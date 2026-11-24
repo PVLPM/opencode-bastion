@@ -1,4 +1,4 @@
-import { Match, Switch, createEffect, on } from "solid-js";
+import { Match, Switch, createEffect, createMemo, on } from "solid-js";
 
 import type { AgentView } from "../model/types";
 import type { Ui } from "@opencode/plugin/gui";
@@ -19,13 +19,14 @@ export function StatusMark(props: {
   const Icon = props.ui.Icon;
   const Tooltip = props.ui.Tooltip;
   const tip = () => statusTip(props.agent);
+  const status = createMemo(() => props.agent.status);
   let mark: HTMLSpanElement | undefined;
 
   // A status change swaps the glyph; the new one settles in from slightly
   // smaller so the change reads as one mark turning into another, never on mount.
   createEffect(
     on(
-      () => props.agent.status,
+      status,
       () => {
         if (!props.animate || mark === undefined || !canAnimate()) return;
         mark.animate(

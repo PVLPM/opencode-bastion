@@ -4,7 +4,7 @@ import { canAnimate } from "./motion";
 
 const FLIP_ID = "bn-flip";
 /** On-screen moves use the strong ease-in-out; arrivals the strong ease-out. */
-const MOVE_MS = 320;
+const MOVE_MS = 240;
 const MOVE: KeyframeAnimationOptions = {
   id: FLIP_ID,
   duration: MOVE_MS,
@@ -35,6 +35,7 @@ export function createFlip(
 ): void {
   let before = new Map<string, number>();
   let settle: ReturnType<typeof setTimeout> | undefined;
+  let focused: HTMLElement | undefined;
   onCleanup(() => clearTimeout(settle));
 
   const items = (root: HTMLElement) =>
@@ -49,6 +50,8 @@ export function createFlip(
       () => {
         before = new Map();
         const root = host();
+        const active = document.activeElement;
+        focused = active instanceof HTMLElement && root?.contains(active) ? active : undefined;
         if (!enabled || root === undefined) return;
         for (const { id, element } of items(root)) {
           before.set(id, element.getBoundingClientRect().top);
@@ -63,6 +66,9 @@ export function createFlip(
       key,
       () => {
         const root = host();
+        if (focused?.isConnected && document.activeElement === document.body) {
+          focused.focus({ preventScroll: true });
+        }
         if (!enabled || root === undefined || before.size === 0 || !canAnimate()) return;
         const now = items(root);
         if (!now.some(({ id }) => before.has(id))) return;
@@ -72,11 +78,17 @@ export function createFlip(
         root.dataset.bnGliding = "true";
         clearTimeout(settle);
         settle = setTimeout(() => delete root.dataset.bnGliding, MOVE_MS + 40);
-        for (const { id, element } of now) {
+        for (const { element } of now) {
           for (const running of element.getAnimations()) {
             if (running.id === FLIP_ID) running.cancel();
           }
-          const top = element.getBoundingClientRect().top;
+        }
+        const positions = now.map(({ id, element }) => ({
+          id,
+          element,
+          top: element.getBoundingClientRect().top,
+        }));
+        for (const { id, element, top } of positions) {
           const old = before.get(id);
           if (old === undefined) {
             element.animate(

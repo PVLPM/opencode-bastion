@@ -3,7 +3,6 @@ import type { AgentStatus, Handoff, LanesView } from "../model/types";
 /** Row metrics shared by the CSS (see `.bn-lanes`) and the connector paths. */
 const AXIS_HEIGHT = 22;
 export const LANE_HEIGHT = 28;
-const BLOCK_HEIGHT = 20;
 
 /** Inset of the time origin from the track's left edge, and room after the last block. */
 const START_PAD = 8;
@@ -12,11 +11,7 @@ const MIN_BLOCK = 3;
 /** Gap a label keeps before the next block on its lane; below the minimum it is hidden. */
 const LABEL_GAP = 6;
 const MIN_LABEL = 18;
-/** A handoff leaves its prompt block this far to the right before it curves down. */
-const LEAVE = 6;
-/** Horizontal travel of the curve, so it lands just after the call, never under the prompt. */
-const RUN = 18;
-const LAND_INSET = 4;
+export const IN_BLOCK_LABEL_MIN = 36;
 const MIN_TICK_SPACING = 64;
 const MIN_FIT_TICK_SPACING = 44;
 const NOW_LABEL_ROOM = 64;
@@ -77,8 +72,6 @@ interface Connector {
   /** The child block it feeds is still running. */
   readonly live: boolean;
   readonly d: string;
-  /** A small caret on the child block's top edge where the call lands. */
-  readonly mark: string;
 }
 
 export interface LanesGeometry {
@@ -86,6 +79,8 @@ export interface LanesGeometry {
   readonly lanes: readonly LaneBox[];
   readonly ticks: readonly Tick[];
   readonly connectors: readonly Connector[];
+  readonly inbound: ReadonlyMap<string, ReadonlySet<Handoff["kind"]>>;
+  readonly sourceAgent: string | undefined;
   readonly width: number;
   readonly height: number;
   /** First start to the last end, or to now while anything is live. */
@@ -140,42 +135,17 @@ function laneCenter(index: number): number {
 
 const round = (value: number) => Math.round(value * 10) / 10;
 
-/**
- * Where a handoff leaves the orchestrator lane: the right end of the prompt
- * block that issued it (the last one to start at or before the call), or the
- * call time itself while that block still runs or when none is known.
- */
-export function handoffStart(rootBlocks: readonly BlockBox[], at: number, atX: number): number {
-  const prompt = rootBlocks.findLast((block) => block.start <= at);
-  if (prompt === undefined || prompt.live) return atX;
-  return prompt.x + prompt.width;
-}
-
-/**
- * A handoff connector: out of the prompt block's right end, a short level run,
- * then one cubic curve that leaves horizontally and arrives vertically on the
- * child block's top edge, just after the call and always within the block.
- */
+/** Keep both tangents horizontal. Monotonic y prevents even a reverse-x curve from looping. */
 export function handoffPath(
   start: { readonly x: number; readonly y: number },
-  atX: number,
-  target: { readonly x: number; readonly width: number; readonly top: number },
-) {
-  const leaveX = start.x + LEAVE;
-  const low = target.x + Math.min(LAND_INSET, target.width / 2);
-  const high = target.x + Math.max(target.width - LAND_INSET, target.width / 2);
-  const landX = Math.min(high, Math.max(low, Math.max(atX, leaveX + RUN - LEAVE)));
-  const drop = target.top - start.y;
-  const reach = Math.max(LEAVE, (landX - leaveX) * 0.6);
-  const d =
-    `M ${round(start.x)} ${round(start.y)} H ${round(leaveX)} ` +
-    `C ${round(leaveX + reach)} ${round(start.y)} ${round(landX)} ${round(target.top - drop * 0.55)} ` +
-    `${round(landX)} ${round(target.top)}`;
-  return { d, landX };
-}
-
-function insertMark(x: number, top: number): string {
-  return `M ${round(x - 3)} ${round(top + 3)} L ${round(x)} ${round(top + 6)} L ${round(x + 3)} ${round(top + 3)}`;
+  target: { readonly x: number; readonly y: number },
+  right: number,
+): string {
+  const reach = Math.min(40, Math.max(12, Math.abs(target.x - start.x) * 0.42));
+  // At a plot boundary, point the handle back into the plot instead of clipping away the curve.
+  const out = start.x < right ? Math.min(right, start.x + reach) : Math.max(0, start.x - reach);
+  const into = target.x > 0 ? Math.max(0, target.x - reach) : Math.min(right, target.x + reach);
+  return `M ${start.x} ${start.y} C ${Math.min(right, round(out))} ${start.y} ${Math.min(right, round(into))} ${target.y} ${target.x} ${target.y}`;
 }
 
 function detailTicks(
@@ -243,15 +213,18 @@ export function laneGeometry(
   const from = view.from;
   const measured = laneSpan(view, now);
   if (from === undefined || measured === undefined) return undefined;
-  const { span, live } = measured;
+  const { span, live: hasLive } = measured;
   const to = from + span;
   const zoom = pickScale(span, viewport);
-  const x =
+  const mapX =
     scale === "fit"
       ? fitScale(from, to, viewport)
       : (time: number) => START_PAD + ((time - from) / 1000) * zoom;
+  const x = scale === "fit" ? (time: number) => Math.round(mapX(time)) : mapX;
 
   const width = scale === "fit" ? viewport : Math.max(viewport, x(to) + END_PAD);
+  const nowX = hasLive ? x(now) : undefined;
+  const limit = nowX ?? width;
   const lanes = view.lanes.map((lane) => ({
     sessionID: lane.sessionID,
     agent: lane.agent,
@@ -261,10 +234,13 @@ export function laneGeometry(
       const end = block.end ?? Math.max(now, block.start);
       const left = x(block.start);
       const next = lane.blocks[index + 1];
-      const blockWidth = Math.max(MIN_BLOCK, x(end) - left);
-      const gapRoom = (next === undefined ? width : x(next.start)) - LABEL_GAP - left;
+      const blockWidth = Math.max(0, Math.min(limit - left, Math.max(MIN_BLOCK, x(end) - left)));
+      const gapRoom =
+        Math.min(limit, next === undefined ? width : x(next.start)) - LABEL_GAP - left;
       const repeatsTitle = !lane.root && (block.label ?? lane.title) === lane.title;
-      const room = repeatsTitle ? Math.min(gapRoom, blockWidth) : gapRoom;
+      const short = blockWidth < IN_BLOCK_LABEL_MIN;
+      const room = repeatsTitle ? Math.min(gapRoom, short ? 0 : blockWidth) : gapRoom;
+      const textRoom = room - (short ? blockWidth : 0);
       return {
         id: block.id,
         x: left,
@@ -274,39 +250,50 @@ export function laneGeometry(
         status: block.status,
         label: block.label,
         text: block.text,
-        labelWidth: room >= MIN_LABEL ? room : 0,
+        labelWidth: textRoom >= MIN_LABEL ? room : 0,
         live: block.end === undefined,
       };
     }),
   }));
 
-  const nowX = live ? x(now) : undefined;
   const ticks = scale === "fit" ? fitTicks(x, to, span) : detailTicks(x, from, span, zoom, nowX);
 
   const rootIndex = lanes.findIndex((lane) => lane.root);
   const rootBlocks = lanes[rootIndex]?.blocks ?? [];
   const startY = laneCenter(Math.max(0, rootIndex));
+  const targets = new Map<string, { block: BlockBox; y: number; sessionID: string }>();
+  for (const [index, lane] of lanes.entries()) {
+    if (!lane.root)
+      for (const block of lane.blocks)
+        targets.set(block.id, { block, y: laneCenter(index), sessionID: lane.sessionID });
+  }
   const connectors: Connector[] = [];
+  const inbound = new Map<string, Set<Handoff["kind"]>>();
+  let rootCursor = -1;
   for (const handoff of view.handoffs) {
     if (handoff.blockID === undefined) continue;
-    const laneIndex = lanes.findIndex((lane) => lane.sessionID === handoff.childID);
-    const block = lanes[laneIndex]?.blocks.find((candidate) => candidate.id === handoff.blockID);
-    if (block === undefined) continue;
-    const atX = x(handoff.at);
-    const top = laneCenter(laneIndex) - BLOCK_HEIGHT / 2;
-    const path = handoffPath({ x: handoffStart(rootBlocks, handoff.at, atX), y: startY }, atX, {
-      x: block.x,
-      width: block.width,
-      top,
-    });
+    const target = targets.get(handoff.blockID);
+    if (target === undefined || target.sessionID !== handoff.childID || target.block.width === 0)
+      continue;
+    // The view's handoffs and root blocks both arrive in chronological order.
+    while ((rootBlocks[rootCursor + 1]?.start ?? Number.POSITIVE_INFINITY) <= handoff.at)
+      rootCursor += 1;
+    const source = rootBlocks[rootCursor];
+    const { block, y } = target;
+    const atX = Math.max(0, Math.min(limit, x(handoff.at)));
+    const origin = source !== undefined && source.width > 0 ? source.x + source.width : atX;
+    const inserted = handoff.at > block.start && (block.live || handoff.at < block.end);
+    const landing = inserted ? Math.min(block.x + block.width, atX) : block.x;
+    const kinds = inbound.get(block.id) ?? new Set<Handoff["kind"]>();
+    kinds.add(handoff.kind);
+    inbound.set(block.id, kinds);
     connectors.push({
       id: handoff.id,
-      from: rootBlocks.findLast((prompt) => prompt.start <= handoff.at)?.id,
+      from: source?.id,
       to: block.id,
       kind: handoff.kind,
       live: block.live,
-      d: path.d,
-      mark: insertMark(path.landX, top),
+      d: handoffPath({ x: origin, y: startY }, { x: landing, y }, limit),
     });
   }
 
@@ -315,6 +302,8 @@ export function laneGeometry(
     lanes,
     ticks,
     connectors,
+    inbound,
+    sourceAgent: lanes[rootIndex]?.agent,
     width,
     height: AXIS_HEIGHT + lanes.length * LANE_HEIGHT,
     span,

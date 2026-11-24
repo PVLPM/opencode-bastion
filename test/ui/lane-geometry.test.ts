@@ -4,7 +4,6 @@ import {
   fitScale,
   formatTick,
   handoffPath,
-  handoffStart,
   laneGeometry,
   pickScale,
 } from "../../src/ui/lane-geometry";
@@ -26,6 +25,13 @@ function block(sessionID: string, index: number, nowSeconds = 50) {
     ?.blocks.at(index);
   if (found === undefined) throw new Error(`no block ${sessionID}:${index}`);
   return found;
+}
+
+function pathPoints(d: string) {
+  return [...d.matchAll(/(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)/g)].map((point) => ({
+    x: Number(point[1]),
+    y: Number(point[2]),
+  }));
 }
 
 describe("laneGeometry", () => {
@@ -64,19 +70,41 @@ describe("laneGeometry", () => {
     ]);
   });
 
-  it("draws each handoff from the right end of its prompt block in one curve onto the child's top edge", () => {
-    const first = geometry().connectors.find((item) => item.id === "call_a");
-    // Prompt [0 s, 10 s] ends at x 108 on the root lane's center line (y 36); the
-    // call (x 48) feeds Fixer A's block (x 58, top 54), landing a curve's run later.
-    expect(first?.d).toBe("M 108 36 H 114 C 121.2 36 126 44.1 126 54");
-    expect(first?.mark).toBe("M 123 57 L 126 60 L 129 57");
-    expect(first?.live).toBe(false);
+  it("anchors a delegation from the source's right center to the child's left center", () => {
+    const source = block("ses_root", 0);
+    const target = block("ses_fixer_a", 0);
+    const link = geometry().connectors.find((item) => item.id === "call_a");
+    const points = pathPoints(link?.d ?? "");
+    expect(points[0]).toEqual({ x: source.x + source.width, y: 36 });
+    expect(points.at(-1)).toEqual({ x: target.x, y: 64 });
+  });
+
+  it("lands an inserted follow-up in the child at the call's time and mid-height", () => {
+    const view = familyLanes();
+    const followup = handoff("call_mid", "ses_fixer_a", 42, "ses_fixer_a:1", "followup");
+    const result = geometry(50, lanesView(view.lanes, [...view.handoffs, followup]));
+    const link = result.connectors.find((item) => item.id === followup.id);
+    expect(pathPoints(link?.d ?? "").at(-1)).toEqual({ x: START + 420, y: 64 });
+  });
+
+  it.each([
+    ["not started", 42, 38],
+    ["at now and zero width", 50, 50],
+  ])("falls back to call x when the source is %s", (_name, start, time) => {
+    const root = lane("ses_root", "Orchestrator", [[start, undefined]], true);
+    const child = lane("ses_child", "Fixer", [
+      [0, 20],
+      [40, undefined],
+    ]);
+    const call = handoff("call", "ses_child", time, "ses_child:1");
+    const result = geometry(50, lanesView([root, child], [call]));
+    expect(pathPoints(result.connectors[0]?.d ?? "")[0]?.x).toBe(START + time * 10);
   });
 
   it("lets a label run past a short block, stopping before the next one", () => {
     const [first, second] = geometry().lanes[0]?.blocks ?? [];
     expect(first).toMatchObject({ x: START, width: 100, labelWidth: 300 - 6 });
-    expect(second?.labelWidth).toBe(VIEWPORT - 6 - (second?.x ?? 0));
+    expect(second?.labelWidth).toBe(START + 500 - 6 - (second?.x ?? 0));
   });
 
   it("keeps a label that repeats its subagent lane title inside the execution", () => {
@@ -113,33 +141,43 @@ describe("laneGeometry", () => {
 });
 
 describe("handoff connectors", () => {
-  const box = (start: number, end: number, live = false) => ({
-    id: `b${start}`,
-    x: start,
-    width: end - start,
-    start: at(start),
-    end: at(end),
-    status: "done" as const,
-    label: undefined,
-    text: undefined,
-    labelWidth: 0,
-    live,
+  it.each([
+    "fit",
+    "detail",
+  ] as const)("uses no elbows and keeps every %s handoff before now", (scale) => {
+    const view = familyLanes();
+    const liveRoot = lane("ses_root", "Orchestrator", [[0, undefined]], true);
+    const result = laneGeometry(
+      lanesView([liveRoot, ...view.lanes.slice(1)], view.handoffs),
+      at(50),
+      320,
+      scale,
+    );
+    const now = result?.nowX;
+    if (result === undefined || now === undefined) throw new Error("expected a live layout");
+    expect(result.connectors).toHaveLength(3);
+    for (const link of result.connectors) {
+      expect(link.d.match(/[A-Z]/g)).toEqual(["M", "C"]);
+      expect(
+        pathPoints(link.d).every(({ x, y }) => x >= 0 && x <= now && y >= 0 && y <= result.height),
+      ).toBe(true);
+    }
   });
 
   it.each([
-    ["the right end of the closed prompt that issued it", [box(0, 40), box(60, 90)], 70, 90],
-    ["the call itself while that prompt still runs", [box(0, 40), box(60, 90, true)], 70, 70],
-    ["the call itself when no prompt precedes it", [box(60, 90)], 10, 10],
-  ] as const)("start at %s", (_name, blocks, call, expected) => {
-    expect(handoffStart(blocks, at(call), call)).toBe(expected);
-  });
-
-  it("lands inside the child block, never before the call, arriving vertically", () => {
-    const { d, landX } = handoffPath({ x: 100, y: 10 }, 140, { x: 120, width: 200, top: 60 });
-    expect(landX).toBe(140);
-    expect(d.endsWith(`140 ${60 - 50 * 0.55} 140 60`)).toBe(true);
-    const short = handoffPath({ x: 100, y: 10 }, 105, { x: 90, width: 20, top: 60 });
-    expect(short.landX).toBe(106);
+    ["near-vertical", 100, 102, 200],
+    ["reverse-x", 150, 30, 200],
+    ["departure at now", 150, 150, 150],
+  ])("keeps horizontal handles inside the SVG for a %s handoff", (_name, source, target, right) => {
+    const d = handoffPath({ x: source, y: 10 }, { x: target, y: 60 }, right);
+    const [start, out, into, end] = pathPoints(d);
+    expect(start).toEqual({ x: source, y: 10 });
+    expect(end).toEqual({ x: target, y: 60 });
+    expect(out?.y).toBe(10);
+    expect(out?.x).not.toBe(source);
+    expect(into?.y).toBe(60);
+    expect(into?.x).not.toBe(target);
+    expect(pathPoints(d).every(({ x }) => x >= 0 && x <= right)).toBe(true);
   });
 });
 

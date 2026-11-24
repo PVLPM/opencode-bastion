@@ -5,6 +5,7 @@ import type { Ui } from "@opencode/plugin/gui";
 import { ContextRing, contextSummary } from "./context-ring";
 import { formatClock, formatElapsed, formatMoney } from "../model/format";
 import { ProviderLogo } from "./provider-logo";
+import { RollingMoney } from "./rolling-money";
 import { StatusMark } from "./status-mark";
 import { statusLabel } from "./status";
 import { ActivityTicker } from "./ticker";
@@ -146,45 +147,54 @@ export function AgentCard(props: AgentCardProps) {
           <span class="bn-metrics">
             <Show when={changed()}>
               {(lines) => (
-                <span
-                  class="bn-lines"
-                  aria-label={`${lines().added} lines added, ${lines().removed} removed`}
-                >
-                  <span class="bn-lines__add">+{lines().added}</span>
-                  <span class="bn-lines__del">−{lines().removed}</span>
+                <span class="bn-metrics__tip bn-metrics__lines">
+                  <Tooltip value="Session file diff — overlapping edits can appear in more than one agent.">
+                    <span
+                      class="bn-lines"
+                      aria-label={`${lines().added} lines added, ${lines().removed} removed`}
+                    >
+                      <span class="bn-lines__add">+{lines().added}</span>
+                      <span class="bn-lines__del">−{lines().removed}</span>
+                    </span>
+                  </Tooltip>
                 </span>
               )}
             </Show>
             <Show when={elapsed()}>{(duration) => <span>{duration()}</span>}</Show>
             <Show when={props.agent.cost}>
-              {(cost) => (
-                <Show when={cost().estimated} fallback={<span>{formatMoney(cost())}</span>}>
-                  <Tooltip value="Estimated at API list price">
-                    <span class="bn-metrics__tip">{formatMoney(cost())}</span>
-                  </Tooltip>
-                </Show>
-              )}
-            </Show>
-            <Show when={props.agent.context}>
-              {(context) => (
-                <Show when={contextSummary(context())}>
-                  {(summary) => (
-                    <Tooltip value={`Context ${summary()}`}>
-                      <span class="bn-metrics__tip">
-                        <ContextRing context={context()} />
-                      </span>
+              {(cost) => {
+                const amount = <RollingMoney value={cost()} />;
+                return (
+                  <Show when={cost().estimated} fallback={amount}>
+                    <Tooltip value="Estimated at API list price">
+                      <span class="bn-metrics__tip">{amount}</span>
                     </Tooltip>
-                  )}
-                </Show>
-              )}
+                  </Show>
+                );
+              }}
             </Show>
+            <span class="bn-metrics__context">
+              <Show when={props.agent.context}>
+                {(context) => (
+                  <Show when={contextSummary(context())}>
+                    {(summary) => (
+                      <Tooltip value={`Context ${summary()}`}>
+                        <span class="bn-metrics__tip">
+                          <ContextRing context={context()} />
+                        </span>
+                      </Tooltip>
+                    )}
+                  </Show>
+                )}
+              </Show>
+            </span>
             <button
               class="bn-more"
               type="button"
               data-bn-more="true"
               aria-expanded={expanded()}
               aria-controls={detailsID(props.agent.sessionID)}
-              aria-label={`${expanded() ? "Hide" : "Show"} details for ${props.agent.agent}`}
+              aria-label={`${expanded() ? "Hide" : "Show"} details for ${props.agent.agent}${props.agent.title === undefined ? "" : `, ${props.agent.title}`}`}
               onClick={() => {
                 setRevealed(true);
                 setExpanded((value) => !value);
@@ -204,6 +214,7 @@ export function AgentCard(props: AgentCardProps) {
           >
             <div class="bn-reveal__inner">
               <dl class="bn-card__details bn-dl" id={detailsID(props.agent.sessionID)}>
+                <Detail label="Agent">{props.agent.agent}</Detail>
                 <Show when={props.agent.title}>
                   {(title) => <Detail label="Session">{title()}</Detail>}
                 </Show>

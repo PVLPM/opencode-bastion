@@ -20,6 +20,8 @@ import {
   type BlockBox,
   type LaneBox,
   type LaneScale,
+  type LanesGeometry,
+  IN_BLOCK_LABEL_MIN,
   laneGeometry,
   laneSpan,
   LANE_HEIGHT,
@@ -42,12 +44,87 @@ const KEY_STEP = 24;
 const RESERVED = 160;
 /** Width used before the scroller has been measured. */
 const FALLBACK_VIEWPORT = 240;
-const LANES_ID = "bn-lanes-body";
 
 const SCALE_OPTIONS: readonly { value: LaneScale; label: string; hint: string }[] = [
   { value: "fit", label: "Fit", hint: "Whole session; older time is compressed" },
   { value: "detail", label: "Detail", hint: "True time scale; scroll for earlier work" },
 ];
+
+function ScaleControl(props: {
+  name: string;
+  scale: LaneScale;
+  animate: boolean;
+  select: (scale: LaneScale) => void;
+}) {
+  let group: HTMLDivElement | undefined;
+  const [position, setPosition] = createSignal<{ x: number; width: number }>();
+  const [ready, setReady] = createSignal(false);
+  const measure = () => {
+    const item = group?.querySelector(`[data-bn-scale="${props.scale}"]`)?.parentElement;
+    if (item !== undefined && item !== null) {
+      setPosition({ x: item.offsetLeft, width: item.offsetWidth });
+    }
+  };
+
+  createEffect(on(() => props.scale, measure));
+  onMount(() => {
+    const frame = requestAnimationFrame(() => setReady(true));
+    const observer = "ResizeObserver" in window ? new ResizeObserver(measure) : undefined;
+    for (const item of group?.querySelectorAll(".bn-seg__item") ?? []) observer?.observe(item);
+    onCleanup(() => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+    });
+  });
+
+  const onKey = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
+    if (event.key !== "Home" && event.key !== "End") return;
+    const input = event.currentTarget.querySelector<HTMLInputElement>(
+      event.key === "Home" ? '[data-bn-scale="fit"]' : '[data-bn-scale="detail"]',
+    );
+    if (input === null) return;
+    event.preventDefault();
+    input.click();
+    input.focus();
+  };
+
+  return (
+    <div
+      class="bn-seg"
+      role="radiogroup"
+      aria-label="Time scale"
+      ref={(element) => {
+        group = element;
+      }}
+      onKeyDown={onKey}
+    >
+      <span
+        class="bn-seg__indicator"
+        aria-hidden="true"
+        data-ready={ready() && props.animate ? "true" : undefined}
+        style={{
+          width: position() === undefined ? undefined : `${position()?.width}px`,
+          transform: position() === undefined ? undefined : `translateX(${position()?.x}px)`,
+        }}
+      />
+      <For each={SCALE_OPTIONS}>
+        {(option) => (
+          <label class="bn-seg__item" title={option.hint}>
+            <input
+              class="bn-seg__radio"
+              type="radio"
+              name={props.name}
+              checked={props.scale === option.value}
+              data-bn-scale={option.value}
+              onChange={() => props.select(option.value)}
+            />
+            {option.label}
+          </label>
+        )}
+      </For>
+    </div>
+  );
+}
 
 /**
  * One execution: the block is exactly as long as it ran. Its label is a
@@ -59,6 +136,7 @@ function Block(props: {
   block: () => BlockBox | undefined;
   enter: boolean;
   inspection: Inspection;
+  geometry: Accessor<LanesGeometry | undefined>;
 }) {
   // Read once: Solid re-runs an element's attribute effects together, and a
   // block that existed before mount must never start its entrance later.
@@ -71,6 +149,7 @@ function Block(props: {
         const text = () => block().label ?? props.lane()?.title;
         const id = () => block().id;
         const inspected = () => props.inspection.active() === id();
+        const short = () => block().width < IN_BLOCK_LABEL_MIN;
         return (
           <div
             onFocusIn={() => props.inspection.focus(id())}
@@ -89,7 +168,7 @@ function Block(props: {
               }}
               class="bn-block"
               role="img"
-              tabindex="0"
+              tabindex={block().width > 0 ? "0" : "-1"}
               aria-label={`${props.lane()?.agent}: ${text() ?? "Execution"}, ${statusLabel(block().status)}`}
               aria-details={inspected() ? tipID : undefined}
               data-bn-block={block().id}
@@ -101,17 +180,23 @@ function Block(props: {
                 if (event.pointerType !== "touch") props.inspection.hover(id());
               }}
               onPointerLeave={() => props.inspection.leave(id())}
-            />
+            >
+              <Show when={["running", "waiting", "failed"].includes(block().status)}>
+                <span class="bn-block__end" aria-hidden="true" />
+              </Show>
+            </div>
             <Show when={block().labelWidth > 0 && text()}>
               <span
                 class="bn-block__label"
                 aria-hidden="true"
                 data-status={block().status}
+                data-short={short() ? "true" : undefined}
                 data-enter={enter ? "true" : undefined}
                 style={{
                   left: `${block().x}px`,
                   "max-width": `${block().labelWidth}px`,
                   "--bn-inside": `${block().width}px`,
+                  "--bn-label-offset": `${short() ? block().width : 0}px`,
                 }}
               >
                 <span>{text()}</span>
@@ -124,6 +209,8 @@ function Block(props: {
                   anchor={trigger()}
                   block={block()}
                   prompt={props.lane()?.root === true}
+                  sourceAgent={props.geometry()?.sourceAgent}
+                  inbound={props.geometry()?.inbound.get(id())}
                   onEnter={() => props.inspection.hover(id())}
                   onLeave={() => props.inspection.leave(id())}
                   onDismiss={props.inspection.dismiss}
@@ -143,6 +230,7 @@ function Lane(props: {
   ready: Accessor<boolean>;
   animate: boolean;
   inspection: Inspection;
+  geometry: Accessor<LanesGeometry | undefined>;
 }) {
   const blocks = createKeyed(
     () => props.lane()?.blocks ?? [],
@@ -169,6 +257,7 @@ function Lane(props: {
             block={() => blocks.get(id)}
             enter={untrack(props.ready) && props.animate}
             inspection={props.inspection}
+            geometry={props.geometry}
           />
         )}
       </For>
@@ -196,6 +285,8 @@ interface Inspection {
  */
 export function AgentLanes(props: AgentLanesProps) {
   const Icon = props.ui.Icon;
+  const uid = createUniqueId();
+  const lanesID = `bn-lanes-${uid}`;
   const [open, setOpen] = createSignal(true);
   const [height, setHeight] = createSignal(DEFAULT_HEIGHT);
   const [viewport, setViewport] = createSignal(FALLBACK_VIEWPORT);
@@ -240,13 +331,16 @@ export function AgentLanes(props: AgentLanesProps) {
 
   // Until the user picks a scale, a session the Detail view would have to scroll opens in Fit.
   const [chosen, setChosen] = createSignal<LaneScale>();
-  const scale = createMemo<LaneScale>(() => {
+  const scale = createMemo<LaneScale>((previous) => {
+    if (!open()) return previous;
     const picked = chosen();
     if (picked !== undefined) return picked;
     const span = laneSpan(props.lanes, props.now)?.span ?? 0;
     return outgrowsDetail(span, viewport()) ? "fit" : "detail";
-  });
-  const geometry = createMemo(() => laneGeometry(props.lanes, props.now, viewport(), scale()));
+  }, "detail");
+  const geometry = createMemo<LanesGeometry | undefined>((previous) =>
+    open() ? laneGeometry(props.lanes, props.now, viewport(), scale()) : previous,
+  );
   const lanes = createKeyed(
     () => geometry()?.lanes ?? [],
     (lane) => lane.sessionID,
@@ -286,7 +380,8 @@ export function AgentLanes(props: AgentLanesProps) {
     pinned = scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 4;
   };
 
-  createEffect(on(() => geometry()?.width, followNewest));
+  const canvasWidth = createMemo(() => geometry()?.width);
+  createEffect(on(canvasWidth, followNewest));
 
   onMount(() => {
     setReady(true);
@@ -329,7 +424,7 @@ export function AgentLanes(props: AgentLanesProps) {
           role="separator"
           tabindex="0"
           aria-orientation="horizontal"
-          aria-controls={LANES_ID}
+          aria-controls={lanesID}
           aria-label="Resize agent lanes"
           aria-valuemin={MIN_LANES_HEIGHT}
           aria-valuemax={Number.isFinite(maxHeight()) ? maxHeight() : undefined}
@@ -353,7 +448,7 @@ export function AgentLanes(props: AgentLanesProps) {
           class="bn-lanes__toggle"
           type="button"
           aria-expanded={open()}
-          aria-controls={LANES_ID}
+          aria-controls={lanesID}
           onClick={() => {
             dismiss();
             setOpen((value) => !value);
@@ -363,26 +458,15 @@ export function AgentLanes(props: AgentLanesProps) {
           <span class="bn-lanes__title">Lanes</span>
         </button>
         <Show when={open()}>
-          <div class="bn-seg" role="radiogroup" aria-label="Time scale">
-            <For each={SCALE_OPTIONS}>
-              {(option) => (
-                <button
-                  class="bn-seg__item"
-                  type="button"
-                  role="radio"
-                  aria-checked={scale() === option.value}
-                  title={option.hint}
-                  data-bn-scale={option.value}
-                  onClick={() => {
-                    pinned = true;
-                    setChosen(option.value);
-                  }}
-                >
-                  {option.label}
-                </button>
-              )}
-            </For>
-          </div>
+          <ScaleControl
+            name={`bn-scale-${uid}`}
+            scale={scale()}
+            animate={props.animate}
+            select={(value) => {
+              pinned = true;
+              setChosen(value);
+            }}
+          />
         </Show>
         <Show when={geometry()}>
           {(measured) => <span class="bn-lanes__span">{formatDuration(measured().span)}</span>}
@@ -390,7 +474,7 @@ export function AgentLanes(props: AgentLanesProps) {
       </div>
       <div
         class="bn-lanes__scroll"
-        id={LANES_ID}
+        id={lanesID}
         ref={(element) => {
           scroller = element;
         }}
@@ -452,7 +536,13 @@ export function AgentLanes(props: AgentLanesProps) {
                   )}
                 </For>
               </div>
-              <div class="bn-lanes__track" style={{ width: `${measured().width}px` }}>
+              <div
+                class="bn-lanes__track"
+                style={{
+                  width: `${measured().width}px`,
+                  "--bn-post-now": `${measured().width - (measured().nowX ?? measured().width)}px`,
+                }}
+              >
                 <For each={ticks.ids()}>
                   {(key) => (
                     <span class="bn-lanes__grid" style={{ left: `${ticks.get(key)?.x ?? 0}px` }} />
@@ -467,6 +557,7 @@ export function AgentLanes(props: AgentLanesProps) {
                         ready={ready}
                         animate={props.animate}
                         inspection={inspection}
+                        geometry={geometry}
                       />
                     )}
                   </For>
@@ -482,6 +573,8 @@ export function AgentLanes(props: AgentLanesProps) {
                       <Show when={connectors.get(id)}>
                         {(link) => {
                           const enter = untrack(ready) && props.animate;
+                          const [drawing, setDrawing] = createSignal(enter);
+                          const mask = `bn-handoff-${createUniqueId()}`;
                           return (
                             <g
                               class="bn-link"
@@ -496,8 +589,28 @@ export function AgentLanes(props: AgentLanesProps) {
                               }
                               data-enter={enter ? "true" : undefined}
                             >
-                              <path class="bn-link__path" d={link().d} />
-                              <path class="bn-link__mark" d={link().mark} />
+                              <Show when={drawing()}>
+                                <mask
+                                  id={mask}
+                                  maskUnits="userSpaceOnUse"
+                                  x="0"
+                                  y="0"
+                                  width={measured().width}
+                                  height={measured().height}
+                                >
+                                  <path
+                                    class="bn-link__reveal"
+                                    d={link().d}
+                                    pathLength="1"
+                                    onAnimationEnd={() => setDrawing(false)}
+                                  />
+                                </mask>
+                              </Show>
+                              <path
+                                class="bn-link__path"
+                                d={link().d}
+                                mask={drawing() ? `url(#${mask})` : undefined}
+                              />
                             </g>
                           );
                         }}

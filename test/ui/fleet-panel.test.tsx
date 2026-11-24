@@ -1,3 +1,4 @@
+import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -18,12 +19,17 @@ afterEach(() => {
 });
 
 function mountPanel(
-  overrides: Partial<Omit<FleetPanelProps, "fleet">> & { fleet: FleetView | undefined },
+  overrides: Partial<Omit<FleetPanelProps, "fleet">> & {
+    fleet?: FleetView | undefined;
+    readFleet?: () => FleetView;
+  },
 ): HTMLElement {
   const host = document.createElement("div");
   document.body.append(host);
   const props: FleetPanelProps = {
-    fleet: overrides.fleet,
+    get fleet() {
+      return overrides.readFleet?.() ?? overrides.fleet;
+    },
     lanes: overrides.lanes,
     onOpen: overrides.onOpen ?? (() => {}),
     canOpen: overrides.canOpen ?? (() => true),
@@ -54,6 +60,72 @@ function fleetWithFinished(): FleetView {
 }
 
 describe("FleetPanel", () => {
+  it("animates a status mark only when its status changes", () => {
+    const markAnimation = vi.fn();
+    const original = Object.getOwnPropertyDescriptor(Element.prototype, "animate");
+    Object.defineProperty(Element.prototype, "animate", {
+      configurable: true,
+      value: function (this: Element) {
+        if (this.classList.contains("bn-mark")) markAnimation(this);
+      },
+    });
+    try {
+      const [fleet, setFleet] = createSignal(sampleFleet());
+      const host = mountPanel({ readFleet: fleet });
+      expect(markAnimation).not.toHaveBeenCalled();
+      setFleet(sampleFleet());
+      expect(markAnimation).not.toHaveBeenCalled();
+      setFleet(testFleet(testRoot({ status: "waiting" }), [runningChild(), waitingChild()]));
+      const changed = host.querySelector('[data-kind="root"] .bn-mark');
+      expect(markAnimation.mock.calls).toEqual([[changed]]);
+    } finally {
+      if (original === undefined) Reflect.deleteProperty(Element.prototype, "animate");
+      else Object.defineProperty(Element.prototype, "animate", original);
+    }
+  });
+
+  it("explains the line count's attribution without adding a tab stop", () => {
+    const host = mountPanel({
+      fleet: testFleet(testRoot({ lines: { added: 12, removed: 3 } }), []),
+      ui: {
+        ...uiStub,
+        Tooltip: (props) => <span data-tooltip={String(props.value)}>{props.children}</span>,
+      },
+    });
+    const counter = host.querySelector(".bn-lines");
+    expect(counter?.closest("[data-tooltip]")?.getAttribute("data-tooltip")).toBe(
+      "Session file diff — overlapping edits can appear in more than one agent.",
+    );
+    expect(counter?.getAttribute("aria-label")).toBe("12 lines added, 3 removed");
+    expect(counter?.hasAttribute("tabindex")).toBe(false);
+  });
+
+  it("keeps the existing root card mounted across fleet revisions", () => {
+    const [fleet, setFleet] = createSignal(sampleFleet());
+    const host = mountPanel({ readFleet: fleet });
+    const root = () => host.querySelector('[data-kind="root"]');
+    const previous = root();
+    setFleet(testFleet(testRoot({ activity: "Checking results" }), [runningChild()]));
+    expect(root()).toBe(previous);
+    expect(root()?.textContent).toContain("Checking results");
+  });
+
+  it("retains the focused disclosure and its open details when a card moves to Finished", () => {
+    const [fleet, setFleet] = createSignal(sampleFleet());
+    const host = mountPanel({ readFleet: fleet });
+    const more = () =>
+      host.querySelector<HTMLButtonElement>('[data-bn-card="ses_child_a"] [data-bn-more]');
+    const disclosure = more();
+    disclosure?.focus();
+    disclosure?.click();
+    setFleet(
+      testFleet(testRoot(), [waitingChild(), runningChild({ status: "done", endedAt: TEST_NOW })]),
+    );
+    expect(more()).toBe(disclosure);
+    expect(disclosure?.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(disclosure);
+    expect(disclosure?.closest("article")?.previousElementSibling?.className).toBe("bn-group");
+  });
   it("opens the session when the card body is clicked", () => {
     const onOpen = vi.fn<(sessionID: string) => void>();
     const host = mountPanel({ fleet: sampleFleet(), onOpen });

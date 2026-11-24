@@ -13,7 +13,7 @@
 .bn-panel {
   --bn-text: var(--v2-text-text-base, var(--text-strong, #fafafa));
   --bn-muted: var(--v2-text-text-muted, var(--text-base, #aeaeae));
-  --bn-faint: var(--v2-text-text-faint, var(--text-weak, #808080));
+  --bn-faint: var(--v2-text-text-muted, #5c5c5c);
   --bn-icon: var(--v2-icon-icon-base, var(--icon-base, #dbdbdb));
   --bn-icon-muted: var(--v2-icon-icon-muted, var(--icon-weak-base, #808080));
   --bn-icon-faint: var(--v2-icon-icon-faint, #5c5c5c);
@@ -24,7 +24,7 @@
   --bn-border-strong: var(--v2-border-border-strong, var(--border-base, #ffffff33));
   --bn-hover: var(--v2-overlay-simple-overlay-hover, #ffffff0f);
   --bn-pressed: var(--v2-overlay-simple-overlay-pressed, #ffffff1a);
-  --bn-focus: var(--v2-border-border-focus, var(--border-weak-selected, #a2bcff));
+  --bn-focus: var(--v2-icon-icon-accent, #3b5cf6);
   --bn-accent: var(--v2-icon-icon-accent, var(--text-interactive-base, #a2bcff));
   --bn-warn: var(--v2-state-fg-warning, var(--icon-warning-base, #f2cf76));
   --bn-danger: var(--v2-state-fg-danger, var(--icon-critical-base, #f17471));
@@ -66,6 +66,13 @@
   --bn-card: var(--bn-layer);
   --bn-sunken: color-mix(in srgb, var(--bn-layer) 50%, var(--bn-surface));
   --bn-radar-color: var(--bn-icon);
+  --bn-faint: var(--v2-text-text-muted, #a6a6a6);
+  --bn-focus: var(--v2-border-border-focus, #a2bcff);
+}
+
+:where([data-color-scheme="light"]) .bn-panel {
+  --bn-warn: var(--v2-yellow-1100, #785a12);
+  --bn-success: var(--v2-green-900, #1d783c);
 }
 
 /* Scrollbars as in native panes: transparent until the pointer is over the area. */
@@ -76,8 +83,8 @@
   scrollbar-color: transparent transparent;
 }
 
-.bn-cards:hover,
-.bn-lanes__scroll:hover {
+.bn-cards:is(:hover, :focus-within),
+.bn-lanes__scroll:is(:hover, :focus-within) {
   scrollbar-color: var(--bn-border-strong) transparent;
 }
 
@@ -243,7 +250,7 @@
 .bn-tree[data-bn-gliding] .bn-wire {
   transition:
     stroke 240ms ease,
-    d 320ms var(--bn-ease-move);
+    d 240ms var(--bn-ease-move);
 }
 
 .bn-wire__node {
@@ -367,6 +374,7 @@
   background: var(--bn-layer-2);
   box-shadow: inset 0 0 0 0.5px var(--bn-border-strong);
   color: var(--bn-text);
+  font-size: 11px;
   font-weight: 530;
   text-overflow: ellipsis;
 }
@@ -411,7 +419,7 @@
 .bn-mark__ring {
   width: 7px;
   height: 7px;
-  border: 1.5px solid var(--bn-icon-faint);
+  border: 1.5px solid var(--bn-icon-muted);
   border-radius: 9999px;
 }
 
@@ -431,7 +439,9 @@
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
-  color: var(--bn-text);
+  color: var(--bn-muted);
+  font-size: 12px;
+  font-weight: 440;
   text-overflow: ellipsis;
 }
 
@@ -501,7 +511,7 @@
   display: inline-flex;
   flex: 1 1 auto;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
   overflow: hidden;
 }
@@ -509,8 +519,8 @@
 .bn-logo {
   display: inline-flex;
   flex: none;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   color: var(--bn-icon-muted);
 }
 
@@ -552,6 +562,70 @@
   display: inline-flex;
 }
 
+.bn-metrics__context {
+  display: grid;
+  width: 14px;
+  place-items: center;
+}
+
+.bn-money {
+  position: relative;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bn-money__text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.bn-money__cell {
+  position: relative;
+  display: inline-block;
+}
+
+.bn-money__cell[data-digit] {
+  width: 1ch;
+  text-align: center;
+}
+
+.bn-money__reel {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="reduce"]) .bn-money__cell[data-rolling] {
+    clip-path: inset(0);
+  }
+
+  :root:not([data-motion="reduce"]) .bn-money__cell[data-rolling] .bn-money__current {
+    visibility: hidden;
+  }
+
+  :root:not([data-motion="reduce"]) .bn-money__reel {
+    position: absolute;
+    inset: 0;
+    display: block;
+    animation: bn-money-roll 440ms var(--bn-ease) both;
+  }
+}
+
+.bn-money__reel > span {
+  display: block;
+}
+
+@keyframes bn-money-roll {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-100%);
+  }
+}
+
 .bn-lines {
   display: inline-flex;
   gap: 4px;
@@ -573,7 +647,15 @@
  * ellipsize. Cost and duration never drop; duration is the last to lose room.
  */
 @container bn-card (max-width: 300px) {
-  .bn-lines {
+  .bn-badge {
+    max-width: 48%;
+  }
+
+  .bn-metrics__context {
+    display: contents;
+  }
+
+  .bn-metrics__lines {
     display: none;
   }
 
@@ -615,8 +697,8 @@
   display: inline-grid;
   flex: none;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   margin-inline-start: -2px;
   border-radius: 5px;
   color: var(--bn-icon-muted);
@@ -759,9 +841,12 @@
   content: "";
   position: absolute;
   inset: 3px 0 auto;
+  width: 24px;
   height: 3px;
+  margin-inline: auto;
+  border-radius: 999px;
   background: var(--bn-icon-muted);
-  opacity: 0;
+  opacity: 0.32;
   transition: opacity 120ms ease;
 }
 
@@ -775,8 +860,8 @@
     color: var(--bn-muted);
   }
 
-  .bn-seg__item:hover:not([aria-checked="true"]) {
-    color: var(--bn-muted);
+  .bn-seg__item:hover:not(:has(:checked)) {
+    color: var(--bn-text);
   }
 }
 
@@ -794,7 +879,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 30px;
+  height: 36px;
   padding-inline: 4px 14px;
   color: var(--bn-faint);
   font-size: 11px;
@@ -813,37 +898,78 @@
 }
 
 .bn-lanes__toggle:focus-visible,
-.bn-seg__item:focus-visible {
+.bn-seg__item:has(:focus-visible) {
   outline: 2px solid var(--bn-focus);
   outline-offset: -2px;
 }
 
 /* A small, quiet segmented control, as in the native settings panes. */
 .bn-seg {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
-  padding: 1px;
+  align-items: center;
+  width: fit-content;
+  height: 24px;
+  padding: 0;
   border-radius: 6px;
-  background: var(--bn-layer-2);
+  background: var(--bn-layer);
   box-shadow: inset 0 0 0 0.5px var(--bn-border-base);
 }
 
-.bn-seg__item {
-  height: 18px;
-  padding-inline: 7px;
-  border-radius: 5px;
-  color: var(--bn-faint);
-  font-weight: 530;
-  cursor: pointer;
-  transition:
-    background-color 160ms ease,
-    color 160ms ease,
-    box-shadow 160ms ease;
+.bn-seg__indicator {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 6px;
+  background: var(--bn-surface);
+  box-shadow: 0 0 0 0.5px var(--bn-border-strong);
+  transition: none;
 }
 
-.bn-seg__item[aria-checked="true"] {
-  background: var(--bn-card);
-  box-shadow: var(--bn-raised);
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="reduce"]) .bn-seg__indicator[data-ready="true"] {
+    transition:
+      transform 150ms var(--bn-ease),
+      width 150ms var(--bn-ease);
+  }
+}
+
+.bn-seg__item {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 24px;
+  place-items: center;
+  padding-inline: 8px;
+  border-radius: 6px;
+  color: var(--bn-muted);
+  font-size: 12px;
+  font-weight: 440;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04px;
+  line-height: 100%;
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.bn-seg__item:has(:focus-visible) {
+  z-index: 2;
+}
+
+.bn-seg__item:has(:checked) {
   color: var(--bn-text);
+}
+
+.bn-seg__radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  clip-path: inset(50%);
 }
 
 .bn-lanes__chevron {
@@ -934,7 +1060,6 @@
   padding-inline: 4px 0;
   background: var(--bn-panel-bg);
   color: var(--bn-muted);
-  transition: transform 1000ms linear;
 }
 
 .bn-lanes__labels {
@@ -970,6 +1095,7 @@
   z-index: 0;
   grid-area: 1 / 2 / 3 / 3;
   isolation: isolate;
+  clip-path: inset(0 max(0px, calc(var(--bn-post-now) - 1px)) 0 0);
 }
 
 .bn-lanes__grid {
@@ -980,26 +1106,27 @@
   background: var(--bn-border);
 }
 
-/* Above the blocks, so a connector's caret lands visibly on the block it fed. */
+/* Above the blocks, so a connector stays visible where it meets its child. */
 .bn-lanes__links {
   position: absolute;
   inset: 0 auto auto 0;
   z-index: 2;
   overflow: visible;
+  clip-path: inset(0 var(--bn-post-now) 0 0);
   pointer-events: none;
 }
 
 .bn-link {
   fill: none;
-  stroke: var(--bn-icon-muted);
+  stroke: var(--bn-muted);
   stroke-linecap: round;
   stroke-width: 1;
-  opacity: 0.35;
+  opacity: 0.48;
 }
 
 .bn-link[data-related="true"] {
   stroke: var(--bn-accent);
-  opacity: 0.9;
+  opacity: 1;
 }
 
 .bn-link__path {
@@ -1010,13 +1137,12 @@
   stroke-dasharray: 0.5 3;
 }
 
-.bn-link__mark {
-  stroke-linejoin: round;
-}
-
-/* Drawn in once, left to right along its run, when the handoff first appears. */
-.bn-link[data-enter="true"] {
-  animation: bn-link-in 480ms var(--bn-ease-out) both;
+.bn-link__reveal {
+  fill: none;
+  stroke: white;
+  stroke-width: 4;
+  stroke-dasharray: 1 1;
+  animation: bn-link-in 220ms var(--bn-ease-out) both;
 }
 
 /* No stacking context here: blocks (1) sit under the connectors (2), labels (3) above both. */
@@ -1040,11 +1166,11 @@
 
 .bn-lane__watermark {
   position: sticky;
-  right: 26px;
+  right: 10px;
   display: block;
   width: min(360px, calc(100cqi - var(--bn-lane-label) - 34px));
   margin-inline-start: auto;
-  margin-inline-end: 26px;
+  margin-inline-end: calc(var(--bn-post-now) + 6px);
   overflow: hidden;
   color: var(--bn-muted);
   opacity: 0.37;
@@ -1101,10 +1227,39 @@
 
 /* A live execution reaches for now: a bright leading edge that grows each second. */
 .bn-block[data-live="true"] {
-  box-shadow:
-    inset -2px 0 0 var(--bn-tone),
-    inset 0 0 0 1px color-mix(in srgb, var(--bn-tone) 42%, transparent);
   transition: width 1000ms linear;
+}
+
+.bn-block__end {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 2px;
+  background: var(--bn-tone);
+}
+
+.bn-block[data-status="waiting"] .bn-block__end {
+  width: 4px;
+  clip-path: polygon(0 32%, 100% 50%, 0 68%, 0 100%, 100% 100%, 100% 0%, 0 0%);
+}
+
+.bn-block[data-status="failed"] .bn-block__end {
+  inset: 1px 1px auto auto;
+  width: min(6px, 100%);
+  height: 6px;
+  clip-path: polygon(
+    0 14%,
+    18% 0,
+    50% 35%,
+    82% 0,
+    100% 14%,
+    66% 50%,
+    100% 86%,
+    82% 100%,
+    50% 65%,
+    18% 100%,
+    0 86%,
+    34% 50%
+  );
 }
 
 .bn-block[data-enter="true"] {
@@ -1128,7 +1283,7 @@
   z-index: 3;
   height: 20px;
   overflow: hidden;
-  padding-inline: 6px 2px;
+  padding-inline: calc(var(--bn-label-offset) + 6px) 2px;
   line-height: 20px;
   pointer-events: none;
   white-space: nowrap;
@@ -1153,6 +1308,11 @@
   background-clip: text;
   color: transparent;
   text-overflow: ellipsis;
+}
+
+.bn-block__label[data-short] > span {
+  background: none;
+  color: var(--bn-muted);
 }
 
 .bn-block__label:is([data-status="running"], [data-status="waiting"], [data-status="failed"]) {
@@ -1229,17 +1389,19 @@
   outline-offset: 2px;
 }
 
-/* Fit maps age, so every second all positions drift; glide between them. */
+/* Fit snaps geometry to whole pixels; let an actual move settle without trailing every tick. */
 .bn-lanes__scroll[data-scale="fit"]
 :is(.bn-block, .bn-block__label, .bn-lanes__tick, .bn-lanes__grid) {
   transition:
-    left 1000ms linear,
-    width 1000ms linear,
-    max-width 1000ms linear;
+    left 160ms var(--bn-ease-out),
+    width 160ms var(--bn-ease-out),
+    max-width 160ms var(--bn-ease-out);
 }
 
-.bn-lanes__scroll[data-scale="fit"] .bn-link path {
-  transition: d 1000ms linear;
+.bn-lanes__scroll[data-scale="fit"] .bn-block[data-live="true"] {
+  transition:
+    left 160ms var(--bn-ease-out),
+    width 1000ms linear;
 }
 
 .bn-lanes__now {
@@ -1249,8 +1411,7 @@
   left: 0;
   z-index: 2;
   width: 1px;
-  background: color-mix(in srgb, var(--bn-accent) 55%, transparent);
-  transition: transform 1000ms linear;
+  background: color-mix(in srgb, var(--bn-accent) 80%, transparent);
 }
 
 @keyframes bn-block-in {
@@ -1267,8 +1428,10 @@
 
 @keyframes bn-link-in {
   from {
-    clip-path: inset(0 100% 0 0);
-    opacity: 0;
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
   }
 }
 

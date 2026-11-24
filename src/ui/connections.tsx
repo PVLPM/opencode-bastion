@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 
 import type { Beam } from "../model/types";
 import { createKeyed } from "./keyed";
@@ -50,12 +50,11 @@ function reverse(x: number, from: number, to: number, cardLeft: number): string 
  */
 export function Connections(props: {
   readonly host: HTMLElement | undefined;
-  readonly sessionIDs: readonly string[];
+  readonly arrangement: string;
   readonly beams: readonly Beam[];
   readonly animate: boolean;
 }) {
   const [geometry, setGeometry] = createSignal<Geometry>();
-  const rowKey = createMemo(() => props.sessionIDs.join("\u0000"));
 
   const measure = () => {
     const host = props.host;
@@ -107,10 +106,7 @@ export function Connections(props: {
     });
   };
 
-  createEffect(() => {
-    rowKey();
-    measure();
-  });
+  createEffect(on(() => props.arrangement, measure));
 
   onMount(() => {
     measure();

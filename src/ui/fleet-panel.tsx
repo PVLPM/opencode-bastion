@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { For, Show, createMemo, createSignal, type Accessor } from "solid-js";
 
 import type { AgentView, Beam, FleetView, LanesView } from "../model/types";
 import type { Ui } from "@opencode/plugin/gui";
@@ -7,8 +7,8 @@ import { AgentLanes } from "./agent-lanes";
 import { Connections } from "./connections";
 import { createFlip } from "./flip";
 import { createKeyed } from "./keyed";
-import { formatMoney } from "../model/format";
 import { reduceMotion } from "./motion";
+import { RollingMoney } from "./rolling-money";
 
 export interface FleetPanelProps {
   readonly fleet: FleetView | undefined;
@@ -50,14 +50,17 @@ export function FleetPanel(props: FleetPanelProps) {
     return [fleet.root, ...fleet.active, ...fleet.inactive];
   });
   const all = createKeyed(agents, bySession);
-  const active = createKeyed(() => props.fleet?.active ?? [], bySession);
-  const inactive = createKeyed(() => props.fleet?.inactive ?? [], bySession);
-  const rowIDs = createMemo<readonly string[]>(() => [...active.ids(), ...inactive.ids()]);
+  const active = createMemo(() => props.fleet?.active.map(bySession) ?? []);
+  const inactive = createMemo(() => props.fleet?.inactive.map(bySession) ?? []);
+  const arrangement = createMemo(() => `${active().join(",")}|${inactive().join(",")}`);
+  const branch = createMemo<readonly (string | null)[]>(() =>
+    inactive().length > 0 ? [...active(), null, ...inactive()] : active(),
+  );
 
   // A card joining, or moving between Active and Finished, glides to its new place.
   createFlip(
     host,
-    () => `${active.ids().join(",")}|${inactive.ids().join(",")}`,
+    arrangement,
     "[data-bn-card], .bn-group",
     (element) =>
       element.dataset.bnCard ?? (element.classList.contains("bn-group") ? "" : undefined),
@@ -75,13 +78,13 @@ export function FleetPanel(props: FleetPanelProps) {
     if (next instanceof HTMLElement) next.focus();
   };
 
-  const card = (id: string, root: boolean, finished: boolean) => (
+  const card = (id: string, root: boolean, finished: Accessor<boolean>) => (
     <Show when={all.get(id)}>
       {(agent) => (
         <AgentCard
           agent={agent()}
           root={root}
-          inactive={finished}
+          inactive={finished()}
           now={props.now}
           openable={props.canOpen(id)}
           animate={animate}
@@ -120,7 +123,7 @@ export function FleetPanel(props: FleetPanelProps) {
               <Show when={fleet().totalCost}>
                 {(cost) => (
                   <span class="bn-head__cost" title="Known family cost">
-                    {formatMoney(cost())}
+                    <RollingMoney value={cost()} />
                   </span>
                 )}
               </Show>
@@ -128,25 +131,31 @@ export function FleetPanel(props: FleetPanelProps) {
 
             <div class="bn-cards">
               <div class="bn-tree" ref={setHost}>
-                {card(fleet().root.sessionID, true, false)}
-                <Show when={rowIDs().length > 0}>
+                <Show when={fleet().root.sessionID} keyed>
+                  {(id) => card(id, true, () => false)}
+                </Show>
+                <Show when={branch().length > 0}>
                   <div class="bn-branch">
-                    <For each={active.ids()}>{(id) => card(id, false, false)}</For>
-                    <Show when={inactive.ids().length > 0}>
-                      <div
-                        class="bn-group"
-                        data-after-active={active.ids().length > 0 ? "true" : undefined}
-                      >
-                        Finished
-                        <span class="bn-group__count">{inactive.ids().length}</span>
-                      </div>
-                      <For each={inactive.ids()}>{(id) => card(id, false, true)}</For>
-                    </Show>
+                    <For each={branch()}>
+                      {(id, index) =>
+                        id === null ? (
+                          <div
+                            class="bn-group"
+                            data-after-active={active().length > 0 ? "true" : undefined}
+                          >
+                            Finished
+                            <span class="bn-group__count">{inactive().length}</span>
+                          </div>
+                        ) : (
+                          card(id, false, () => index() > active().length)
+                        )
+                      }
+                    </For>
                   </div>
                 </Show>
                 <Connections
                   host={host()}
-                  sessionIDs={rowIDs()}
+                  arrangement={arrangement()}
                   beams={props.beams}
                   animate={animate}
                 />

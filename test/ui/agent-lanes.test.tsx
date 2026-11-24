@@ -118,10 +118,10 @@ describe("AgentLanes", () => {
     const long = lanesView([lane("ses_root", "Orchestrator", [[0, undefined]], true)]);
     const { host } = mountLanes(long, 3600);
     const checked = () =>
-      host.querySelector('[role="radio"][aria-checked="true"]')?.getAttribute("data-bn-scale");
+      host.querySelector('input[type="radio"]:checked')?.getAttribute("data-bn-scale");
     expect(checked()).toBe("fit");
     expect(scroller(host).dataset.scale).toBe("fit");
-    host.querySelector<HTMLButtonElement>('[data-bn-scale="detail"]')?.click();
+    host.querySelector<HTMLInputElement>('[data-bn-scale="detail"]')?.click();
     expect(checked()).toBe("detail");
     expect(scroller(host).dataset.scale).toBe("detail");
   });
@@ -129,6 +129,40 @@ describe("AgentLanes", () => {
   it("opens a short session in Detail", () => {
     const { host } = mountLanes(lanesView([lane("ses_root", "Orchestrator", [[0, 20]], true)]), 20);
     expect(scroller(host).dataset.scale).toBe("detail");
+  });
+
+  it.each([true, false])("tracks the checked radio with motion enabled=%s", async (animate) => {
+    const { host } = mountLanes(familyLanes(), 50, animate);
+    const group = host.querySelector('[role="radiogroup"]');
+    const indicator = group?.querySelector<HTMLElement>(".bn-seg__indicator");
+    const detail = group?.querySelector<HTMLInputElement>('[data-bn-scale="detail"]');
+    const fit = group?.querySelector<HTMLInputElement>('[data-bn-scale="fit"]');
+    if (!indicator || !fit?.parentElement || !detail?.parentElement) {
+      throw new Error("expected a time scale control");
+    }
+    expect(indicator.getAttribute("aria-hidden")).toBe("true");
+    expect(group?.firstElementChild).toBe(indicator);
+    expect(indicator.hasAttribute("data-ready")).toBe(false);
+    Object.defineProperties(fit.parentElement, {
+      offsetLeft: { value: 0 },
+      offsetWidth: { value: 30 },
+    });
+    Object.defineProperties(detail.parentElement, {
+      offsetLeft: { value: 30 },
+      offsetWidth: { value: 44 },
+    });
+    for (const [key, input, x, width] of [
+      ["Home", fit, 0, 30],
+      ["End", detail, 30, 44],
+    ] as const) {
+      group?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      expect(input.checked).toBe(true);
+      expect(document.activeElement).toBe(input);
+      expect(indicator.style.transform).toBe(`translateX(${x}px)`);
+      expect(indicator.style.width).toBe(`${width}px`);
+    }
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(indicator.hasAttribute("data-ready")).toBe(animate);
   });
 
   it("lists the full task and metadata separately from the accessible block name", () => {
@@ -139,6 +173,7 @@ describe("AgentLanes", () => {
     expect(tip?.getAttribute("popover")).toBe("manual");
     expect([...(tip?.querySelectorAll("dt") ?? [])].map((term) => term.textContent)).toEqual([
       "Task",
+      "Delegated by",
       "Status",
       "Started",
       "Duration",
@@ -148,6 +183,59 @@ describe("AgentLanes", () => {
       new Date(at(8)).toISOString(),
     );
     expect(tip?.querySelector("dl > :last-child dd")?.textContent).toBe("17s");
+  });
+
+  it("uses a distinct native radio group for each mounted panel", () => {
+    const first = mountLanes(familyLanes()).host;
+    const second = mountLanes(familyLanes()).host;
+    const group = (host: HTMLElement) =>
+      [...host.querySelectorAll<HTMLInputElement>('input[type="radio"]')].map(
+        (input) => input.name,
+      );
+    expect(new Set(group(first)).size).toBe(1);
+    expect(group(first)[0]).not.toBe(group(second)[0]);
+  });
+
+  it("freezes the canvas while collapsed and catches up on reopen", () => {
+    const { host, setNow } = mountLanes(familyLanes());
+    const toggle = host.querySelector<HTMLButtonElement>(".bn-lanes__toggle");
+    const live = host.querySelector<HTMLElement>('[data-bn-block="ses_fixer_a:1"]');
+    const width = live?.style.width;
+    toggle?.click();
+    setNow(55);
+    expect(live?.style.width).toBe(width);
+    toggle?.click();
+    expect(live?.style.width).not.toBe(width);
+  });
+
+  it("places a short block's label beyond its edge when there is free space", () => {
+    const view = lanesView([
+      lane(
+        "ses_root",
+        "Orchestrator",
+        [
+          [0, 1],
+          [45, undefined],
+        ],
+        true,
+      ),
+    ]);
+    const { host } = mountLanes(view);
+    const short = host.querySelector<HTMLElement>(".bn-block__label[data-short]");
+    expect(short?.textContent).toBe("Orchestrator 0");
+    const width = short?.previousElementSibling?.getAttribute("style");
+    expect(width).toContain(`width: ${short?.style.getPropertyValue("--bn-label-offset")}`);
+  });
+
+  it.each([
+    ["ses_fixer_a:0", "Delegated by"],
+    ["ses_fixer_a:1", "Follow-up from"],
+  ])("names the confirmed source for %s", (id, label) => {
+    const { host } = mountLanes(familyLanes());
+    host.querySelector<HTMLElement>(`[data-bn-block="${id}"]`)?.focus();
+    const terms = [...host.querySelectorAll(".bn-lanes__tip dt")];
+    const source = terms.find((term) => term.textContent === label);
+    expect(source?.nextElementSibling?.textContent).toBe("Orchestrator");
   });
 
   it("updates the open duration while an execution is live", () => {
@@ -220,7 +308,7 @@ describe("AgentLanes", () => {
       [100, 100],
     ] as const) {
       const { host, setNow } = mountLanes(long, 600);
-      host.querySelector<HTMLButtonElement>('[data-bn-scale="detail"]')?.click();
+      host.querySelector<HTMLInputElement>('[data-bn-scale="detail"]')?.click();
       const element = scroller(host);
       fakeScrollBox(element, 1000, 200);
       element.scrollLeft = scrolledTo;
