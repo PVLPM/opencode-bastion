@@ -1,0 +1,7 @@
+{
+  "reporters": ["consoleFull"],
+  "format": ["typescript", "tsx", "css"],
+  "ignore": ["**/dist/**", "**/node_modules/**"],
+  "threshold": 0,
+  "absolute": true
+}
