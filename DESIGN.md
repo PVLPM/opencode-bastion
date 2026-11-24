@@ -299,9 +299,10 @@ radio group rather than ARIA-styled buttons. Its container is 24px high and
 fit-content with no outer padding, a 6px radius, a `--bn-layer` (native layer 01)
 background and a 0.5px inset `--bn-border-base` hairline instead of a border. One
 indicator span sits behind the labels, using `--bn-surface` (native base), a
-0.5px `--bn-border-strong` hairline and the same 6px radius. It slides in about
-150ms without bounce, never animates on first mount, and jumps under reduced
-motion. Items are 24px high with 8px inline padding, 12px at weight 440, tabular
+0.5px `--bn-border-strong` hairline and the same 6px radius. It follows the
+selected item's position and width over about 150ms without bounce, never
+animates on first mount, and jumps under reduced motion. Items take their own
+label's width, 24px high with 8px inline padding, 12px at weight 440, tabular
 numerals, a transparent background and no per-item shadow; the selected label
 uses `--bn-text` and the others stay `--bn-muted`. The group keeps one Tab stop,
 arrow/Home/End movement and a 2px inset focus ring. The 36px Lanes bar keeps the

@@ -116,8 +116,9 @@ Lanes:
       focus.
 - [ ] Following the newest work stops once the user scrolls back.
 - [ ] The scale control is the native compact segmented style: 24px high,
-      fit-content, no outer padding, one sliding indicator, 8px item padding, no
-      per-item shadow, centered inside the 36px Lanes bar with 6px of clearance
+      fit-content, no outer padding, one indicator that follows the selected
+      item's position and width, 8px item padding, no per-item shadow, centered
+      inside the 36px Lanes bar with 6px of clearance
       above and below. The selected label uses the base color; the rest are muted.
 - [ ] The scale control is one native-radio Tab stop with arrow/Home/End movement
       and a 2px inset focus ring.

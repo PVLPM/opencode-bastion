@@ -940,8 +940,7 @@
   position: relative;
   z-index: 1;
   display: grid;
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 0 0 auto;
   height: 24px;
   place-items: center;
   padding-inline: 8px;
