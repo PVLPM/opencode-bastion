@@ -29,6 +29,7 @@
   --bn-line-quiet: var(--border-weaker-base, #202020);
   --bn-selected: var(--border-weak-selected, #034cff9e);
   --bn-wire: color-mix(in srgb, var(--bn-accent) 70%, transparent);
+  --bn-wire-quiet: color-mix(in srgb, var(--bn-accent) 54%, transparent);
   --bn-icon-size: 12px;
 
   position: relative;
@@ -141,15 +142,10 @@
   outline-offset: 1px;
 }
 
-.bn-needs__icon,
-.bn-needs__arrow {
+.bn-needs__icon {
   width: 10px;
   height: 10px;
   flex: none;
-}
-
-.bn-needs__arrow {
-  opacity: 0.7;
 }
 
 .bn-empty {
@@ -221,6 +217,10 @@
   fill: none;
   stroke: var(--bn-wire);
   stroke-width: 1;
+}
+
+.bn-wire--quiet {
+  stroke: var(--bn-wire-quiet);
 }
 
 .bn-node {
@@ -369,9 +369,20 @@
   opacity: 0.55;
 }
 
+.bn-card__identity {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.bn-card__identity:has(.bn-card__session) .bn-card__name {
+  max-width: 45%;
+}
+
 .bn-card__name {
   flex: 0 1 auto;
-  max-width: 44%;
   min-width: 0;
   overflow: hidden;
   color: var(--bn-strong);
@@ -802,15 +813,31 @@
 .bn-timeline__rows {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .bn-timeline__row {
+  display: grid;
+  grid-template-columns: minmax(0, 78px) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.bn-timeline__label {
+  overflow: hidden;
+  color: var(--bn-weak);
+  font-size: 10.5px;
+  line-height: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bn-timeline__track {
   position: relative;
-  display: block;
   height: 4px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--bn-fg) 9%, transparent);
+  background: color-mix(in srgb, var(--bn-fg) 11%, transparent);
 }
 
 .bn-timeline__bar {

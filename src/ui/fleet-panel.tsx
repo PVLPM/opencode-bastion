@@ -135,7 +135,6 @@ export function FleetPanel(props: FleetPanelProps) {
                 <span>
                   {waiting()} {waiting() === 1 ? "needs" : "need"} you
                 </span>
-                <Icon name="arrow-down-to-line" class="bn-needs__arrow" />
               </button>
             </Show>
             <Show when={props.fleet?.totalCost}>

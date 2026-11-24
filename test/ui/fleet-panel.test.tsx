@@ -37,6 +37,20 @@ function sampleFleet(): FleetView {
   return testFleet(testRoot(), [runningChild(), waitingChild()]);
 }
 
+function fleetWithFinished(): FleetView {
+  return testFleet(testRoot(), [
+    runningChild(),
+    runningChild({
+      sessionID: "ses_child_done",
+      agent: "Shipper",
+      title: "Ship the release",
+      status: "done",
+      activity: undefined,
+      endedAt: TEST_NOW - 1000,
+    }),
+  ]);
+}
+
 describe("FleetPanel", () => {
   it("opens the session when the card body is clicked", () => {
     const onOpen = vi.fn<(sessionID: string) => void>();
@@ -120,5 +134,20 @@ describe("FleetPanel", () => {
     document.documentElement.dataset.motion = "reduce";
     const reduced = mountPanel({ fleet, beams });
     expect(reduced.querySelector(".bn-beam")).toBeNull();
+  });
+
+  it("links inactive agents with a quiet wire", () => {
+    const host = mountPanel({ fleet: fleetWithFinished() });
+    const wire = host.querySelector('[data-bn-wire="ses_child_done"]');
+
+    expect(wire?.getAttribute("data-inactive")).toBe("true");
+    expect(wire?.classList.contains("bn-wire--quiet")).toBe(true);
+  });
+
+  it("renders a beam for an inactive agent", () => {
+    const beams: Beam[] = [{ id: "beam-in", sessionID: "ses_child_done", direction: "in" }];
+    const host = mountPanel({ fleet: fleetWithFinished(), beams });
+
+    expect(host.querySelector('[data-bn-beam="beam-in"]')).not.toBeNull();
   });
 });

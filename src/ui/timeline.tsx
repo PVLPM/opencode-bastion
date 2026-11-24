@@ -5,6 +5,8 @@ import { formatDuration } from "./format";
 
 interface Bar {
   readonly sessionID: string;
+  readonly label: string;
+  readonly title: string;
   readonly left: number;
   readonly width: number;
   readonly status: AgentStatus;
@@ -25,8 +27,8 @@ function endOf(agent: AgentView, now: number): number | undefined {
 
 /**
  * One shared time axis for the family, one thin row per agent, so staggered and
- * concurrent work is legible without turning into a trace waterfall. The cards
- * above carry the labels; this stays a glanceable strip.
+ * concurrent work is legible without turning into a trace waterfall. Each row
+ * carries its agent name and keeps the cards above as the full record.
  */
 export function Timeline(props: { fleet: FleetView; now: number }) {
   const model = createMemo<Timeline | undefined>(() => {
@@ -51,6 +53,8 @@ export function Timeline(props: { fleet: FleetView; now: number }) {
       const left = Math.min(((start - from) / total) * 100, 100 - width);
       return {
         sessionID: agent.sessionID,
+        label: agent.agent,
+        title: agent.title === undefined ? agent.agent : `${agent.agent} — ${agent.title}`,
         left,
         width,
         status: agent.status,
@@ -71,13 +75,18 @@ export function Timeline(props: { fleet: FleetView; now: number }) {
           <div class="bn-timeline__rows">
             <For each={timeline().bars}>
               {(bar) => (
-                <span class="bn-timeline__row">
-                  <span
-                    class="bn-timeline__bar"
-                    data-status={bar.status}
-                    data-inactive={bar.inactive ? "true" : undefined}
-                    style={{ left: `${bar.left}%`, width: `${bar.width}%` }}
-                  />
+                <span class="bn-timeline__row" data-session={bar.sessionID}>
+                  <span class="bn-timeline__label" title={bar.title}>
+                    {bar.label}
+                  </span>
+                  <span class="bn-timeline__track">
+                    <span
+                      class="bn-timeline__bar"
+                      data-status={bar.status}
+                      data-inactive={bar.inactive ? "true" : undefined}
+                      style={{ left: `${bar.left}%`, width: `${bar.width}%` }}
+                    />
+                  </span>
                 </span>
               )}
             </For>

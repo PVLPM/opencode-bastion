@@ -20,8 +20,6 @@ function iconPath(name: IconName): string {
       return "M3.4 8.4 6.3 11.3 12.6 4.9";
     case "dash":
       return "M4 8h8";
-    case "arrow-down-to-line":
-      return "M8 2.8v7.4M5.2 7.6 8 10.4l2.8-2.8M3.4 13h9.2";
     case "sessions-stack":
       return "M3 5.2h10M3 8h10M3 10.8h6";
     default:

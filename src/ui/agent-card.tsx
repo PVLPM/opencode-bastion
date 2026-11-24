@@ -88,21 +88,23 @@ export function AgentCard(props: AgentCardProps) {
       <div class="bn-card__body">
         <div class="bn-card__title">
           <ProviderLogo providerID={props.agent.model?.providerID} />
-          <span class="bn-card__name" title={props.agent.agent}>
-            {props.agent.agent}
-          </span>
-          <Show when={props.agent.title}>
-            {(title) => (
-              <>
-                <span class="bn-card__dot" aria-hidden="true">
-                  •
-                </span>
-                <span class="bn-card__session" title={title()}>
-                  {title()}
-                </span>
-              </>
-            )}
-          </Show>
+          <div class="bn-card__identity">
+            <span class="bn-card__name" title={props.agent.agent}>
+              {props.agent.agent}
+            </span>
+            <Show when={props.agent.title}>
+              {(title) => (
+                <>
+                  <span class="bn-card__dot" aria-hidden="true">
+                    •
+                  </span>
+                  <span class="bn-card__session" title={title()}>
+                    {title()}
+                  </span>
+                </>
+              )}
+            </Show>
+          </div>
           <span class="bn-chip" data-tone={props.agent.status}>
             <Show
               when={props.agent.status === "running"}

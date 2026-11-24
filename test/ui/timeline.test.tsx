@@ -49,4 +49,14 @@ describe("Timeline", () => {
     expect(bars[0]?.getAttribute("data-status")).toBe("done");
     expect(bars[1]?.getAttribute("data-status")).toBe("waiting");
   });
+
+  it("names each row with its agent and the full title on hover", () => {
+    const root = testRoot({ status: "done", startedAt: TEST_NOW - 100_000, endedAt: TEST_NOW });
+    const child = runningChild({ startedAt: TEST_NOW - 50_000 });
+    const host = mountTimeline(testFleet(root, [child]), TEST_NOW);
+    const labels = [...host.querySelectorAll(".bn-timeline__label")];
+
+    expect(labels.map((label) => label.textContent)).toEqual(["Orchestrator", "Fixer"]);
+    expect(labels[1]?.getAttribute("title")).toBe("Fixer — Fix the failing test");
+  });
 });

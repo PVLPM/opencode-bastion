@@ -5,6 +5,7 @@ import type { Beam } from "../model/types";
 interface RowWire {
   readonly sessionID: string;
   readonly centerY: number;
+  readonly inactive: boolean;
   readonly line: string;
   readonly out: string;
   readonly back: string;
@@ -14,6 +15,7 @@ interface Geometry {
   readonly nodeX: number;
   readonly nodeY: number;
   readonly spine: string;
+  readonly spineTail: string | undefined;
   readonly rows: readonly RowWire[];
   readonly bySession: ReadonlyMap<string, RowWire>;
 }
@@ -74,6 +76,7 @@ export function Connections(props: {
       const row: RowWire = {
         sessionID,
         centerY,
+        inactive: element.dataset.inactive === "true",
         line: branch(SPINE_X, centerY, cardLeft),
         out: forward(SPINE_X, nodeY, centerY, cardLeft),
         back: reverse(SPINE_X, nodeY, centerY, cardLeft),
@@ -87,10 +90,13 @@ export function Connections(props: {
       setGeometry(undefined);
       return;
     }
+    const lastActive = rows.findLast((row) => !row.inactive)?.centerY ?? nodeY;
     setGeometry({
       nodeX: SPINE_X,
       nodeY,
-      spine: `M ${SPINE_X} ${nodeY} V ${last.centerY}`,
+      spine: `M ${SPINE_X} ${nodeY} V ${lastActive}`,
+      spineTail:
+        last.centerY > lastActive ? `M ${SPINE_X} ${lastActive} V ${last.centerY}` : undefined,
       rows,
       bySession,
     });
@@ -118,7 +124,19 @@ export function Connections(props: {
           <svg class="bn-wires__svg">
             <circle class="bn-node" cx={measured().nodeX} cy={measured().nodeY} r="2.4" />
             <path class="bn-wire" d={measured().spine} />
-            <For each={measured().rows}>{(row) => <path class="bn-wire" d={row.line} />}</For>
+            <Show when={measured().spineTail}>
+              {(tail) => <path class="bn-wire bn-wire--quiet" d={tail()} />}
+            </Show>
+            <For each={measured().rows}>
+              {(row) => (
+                <path
+                  class={row.inactive ? "bn-wire bn-wire--quiet" : "bn-wire"}
+                  data-bn-wire={row.sessionID}
+                  data-inactive={row.inactive ? "true" : undefined}
+                  d={row.line}
+                />
+              )}
+            </For>
           </svg>
           <Show when={props.animate}>
             <For each={props.beams}>
