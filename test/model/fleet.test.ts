@@ -1,9 +1,18 @@
-import type { SessionMessageInfo, TokenUsageInfo } from "@opencode/client/promise";
+import type { ModelRef, SessionMessageInfo, TokenUsageInfo } from "@opencode/client/promise";
 import { describe, expect, it } from "vitest";
 
 import { buildFleet, type FleetInput, type SessionSnapshot } from "../../src/model/fleet";
-import type { LineStats, ModelLabel, Money } from "../../src/model/types";
-import { makeAssistant, makeSession, makeTokens, makeTool, type SessionValues } from "../fixtures";
+import type { AgentStatus, LineStats, ModelLabel, Money } from "../../src/model/types";
+import { pillView } from "../../src/ui/pill";
+import {
+  makeAssistant,
+  makeError,
+  makeSession,
+  makeTokens,
+  makeTool,
+  makeUser,
+  type SessionValues,
+} from "../fixtures";
 
 interface SnapshotValues extends SessionValues {
   running?: boolean;
@@ -123,6 +132,139 @@ describe("buildFleet", () => {
 
     expect(fleet.active).toHaveLength(1);
     expect(fleet.active[0]?.task).toBe("Final pass");
+  });
+
+  interface TaskCase {
+    readonly name: string;
+    readonly messages: readonly SessionMessageInfo[];
+    readonly expected: string | undefined;
+  }
+
+  const taskCases: readonly TaskCase[] = [
+    {
+      name: "uses the first non-empty line of the latest user prompt",
+      messages: [makeUser(10, "Old prompt"), makeUser(20, "\n\n  Fix the bug  \nwith details")],
+      expected: "Fix the bug",
+    },
+    {
+      name: "ignores a latest prompt with no text",
+      messages: [makeUser(10, "Old prompt"), makeUser(20, "  \n ")],
+      expected: undefined,
+    },
+    {
+      name: "has no task without a user prompt",
+      messages: [makeAssistant()],
+      expected: undefined,
+    },
+  ];
+
+  it.each(taskCases)("orchestrator task $name", ({ messages, expected }) => {
+    const fleet = buildFleet(fleetInput({ root: snapshot({ messages }) }));
+
+    expect(fleet.root.task).toBe(expected);
+  });
+
+  interface EffortCase {
+    readonly name: string;
+    readonly sessionModel: ModelRef | undefined;
+    readonly messages: readonly SessionMessageInfo[];
+    readonly expected: string | undefined;
+  }
+
+  const model = (variant?: string): ModelRef => {
+    const ref: ModelRef = { id: "claude", providerID: "anthropic" };
+    if (variant !== undefined) ref.variant = variant;
+    return ref;
+  };
+
+  const effortCases: readonly EffortCase[] = [
+    {
+      name: "uses the latest assistant's variant",
+      sessionModel: model("low"),
+      messages: [
+        makeAssistant({ model: model("high") }),
+        makeAssistant({ model: model("medium") }),
+      ],
+      expected: "medium",
+    },
+    {
+      name: "falls back to the session model variant",
+      sessionModel: model("medium"),
+      messages: [makeAssistant({ model: model() })],
+      expected: "medium",
+    },
+    {
+      name: "does not inherit an older assistant's variant",
+      sessionModel: undefined,
+      messages: [makeAssistant({ model: model("high") }), makeAssistant({ model: model() })],
+      expected: undefined,
+    },
+  ];
+
+  it.each(effortCases)("effort $name", ({ sessionModel, messages, expected }) => {
+    const values: SnapshotValues = { messages };
+    if (sessionModel !== undefined) values.model = sessionModel;
+    const fleet = buildFleet(fleetInput({ root: snapshot(values) }));
+
+    expect(fleet.root.effort).toBe(expected);
+  });
+
+  interface CardStatusCase {
+    readonly name: string;
+    readonly values: SnapshotValues;
+    readonly status: AgentStatus;
+    readonly detail: string | undefined;
+  }
+
+  const cardStatusCases: readonly CardStatusCase[] = [
+    {
+      name: "permission waits for approval",
+      values: { permissions: 1, running: true },
+      status: "waiting",
+      detail: "Waiting for permission",
+    },
+    {
+      name: "form waits for an answer",
+      values: { forms: 1, running: true },
+      status: "waiting",
+      detail: "Waiting for your answer",
+    },
+    {
+      name: "retry keeps running with a detail",
+      values: {
+        running: true,
+        messages: [
+          makeAssistant({ retry: { attempt: 2, at: 0, error: makeError("rate limited") } }),
+        ],
+      },
+      status: "running",
+      detail: "Retrying (attempt 2)",
+    },
+    {
+      name: "interrupted is unknown",
+      values: { outcome: "interrupted" },
+      status: "unknown",
+      detail: "Interrupted",
+    },
+  ];
+
+  it.each(cardStatusCases)("card status: $name", ({ values, status, detail }) => {
+    const root = buildFleet(fleetInput({ root: snapshot(values) })).root;
+
+    expect(root.status).toBe(status);
+    expect(root.statusDetail).toBe(detail);
+  });
+
+  it("keeps the pill reporting running while the root is done and a child runs", () => {
+    const input = fleetInput({
+      root: snapshot({ outcome: "succeeded", idle: 100 }),
+      children: [snapshot({ id: "ses-child", created: 50, running: true })],
+    });
+    const fleet = buildFleet(input);
+
+    expect(fleet.root.status).toBe("done");
+    expect(fleet.active[0]?.status).toBe("running");
+    expect(pillView(fleet)).toMatchObject({ label: "2 agents · 1 running" });
   });
 
   it("sorts active children oldest first and inactive children newest first", () => {

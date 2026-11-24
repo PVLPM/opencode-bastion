@@ -20,6 +20,16 @@ function inputText(
   return input === undefined ? undefined : jsonText(input[key]);
 }
 
+/** The first non-empty line, trimmed; undefined when the text has none. */
+export function firstLine(text: string | undefined): string | undefined {
+  if (text === undefined) return undefined;
+  for (const line of text.split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    if (trimmed !== "") return trimmed;
+  }
+  return undefined;
+}
+
 function basename(path: string): string {
   const parts = path.split(/[\\/]/u).filter((part) => part !== "");
   return parts.at(-1) ?? path;
@@ -34,9 +44,23 @@ function urlHost(value: string | undefined): string | undefined {
   }
 }
 
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/** Delegations show their target; their description belongs to the task row. */
+function delegationActivity(agent: string | undefined): string | undefined {
+  return agent === undefined ? "Delegating" : `Delegating to ${capitalize(agent)}`;
+}
+
 function toolActivity(part: SessionMessageAssistantTool): string | undefined {
   if (part.state.status !== "running" && part.state.status !== "streaming") return undefined;
   const input = part.state.status === "running" ? part.state.input : undefined;
+  if (part.name === "subagent" || part.name === "task") {
+    return delegationActivity(inputText(input, "agent") ?? inputText(input, "subagent_type"));
+  }
+  const description = firstLine(inputText(input, "description"));
+  if (description !== undefined) return description;
   const filePath = inputText(input, "filePath");
   const file = filePath === undefined ? undefined : basename(filePath);
   switch (part.name) {
@@ -58,10 +82,6 @@ function toolActivity(part: SessionMessageAssistantTool): string | undefined {
     }
     case "websearch":
       return "Searching the web";
-    case "subagent": {
-      const agent = inputText(input, "agent");
-      return agent === undefined ? "Delegating" : `Delegating to ${agent}`;
-    }
     case "skill": {
       const name = inputText(input, "name");
       return name === undefined ? "Loading skill" : `Loading ${name} skill`;

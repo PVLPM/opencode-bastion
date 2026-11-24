@@ -1,5 +1,6 @@
 // Synthetic SDK objects for model tests. Shapes mirror @opencode/client 2.4.1.
 import type {
+  AgentInfo,
   JsonValue,
   ModelInfo,
   ModelRef,
@@ -9,6 +10,7 @@ import type {
   SessionMessageCompactionCompleted,
   SessionMessageCompactionRunning,
   SessionMessageIdle,
+  SessionMessageSynthetic,
   SessionMessageToolStateCompleted,
   SessionMessageToolStateError,
   SessionMessageUser,
@@ -36,6 +38,7 @@ export function makeTokens(values: TokenValues = {}): TokenUsageInfo {
 export interface SessionValues {
   id?: string;
   parentID?: string;
+  agent?: string;
   cost?: number;
   tokens?: TokenUsageInfo;
   outcome?: "succeeded" | "failed" | "interrupted";
@@ -60,6 +63,7 @@ export function makeSession(values: SessionValues = {}): SessionInfo {
     location: values.location ?? { directory: "C:\\project" },
   };
   if (values.parentID !== undefined) info.parentID = values.parentID;
+  if (values.agent !== undefined) info.agent = values.agent;
   if (values.outcome !== undefined) info.outcome = values.outcome;
   if (values.title !== undefined) info.title = values.title;
   if (values.model !== undefined) info.model = values.model;
@@ -103,10 +107,13 @@ export interface ToolValues {
   text?: string;
   error?: SessionStructuredError;
   created?: number;
+  ran?: number;
 }
 
 export function makeTool(values: ToolValues = {}): SessionMessageAssistantTool {
   const input = values.input ?? {};
+  const time: SessionMessageAssistantTool["time"] = { created: values.created ?? 0 };
+  if (values.ran !== undefined) time.ran = values.ran;
   let state: SessionMessageAssistantTool["state"];
   switch (values.status ?? "running") {
     case "streaming":
@@ -140,7 +147,7 @@ export function makeTool(values: ToolValues = {}): SessionMessageAssistantTool {
     id: values.id ?? "tool-1",
     name: values.name ?? "read",
     state,
-    time: { created: values.created ?? 0 },
+    time,
   };
 }
 
@@ -187,6 +194,40 @@ export function makeCompactionCompleted(
 
 export function makeUser(created = 0, text = "Do the work"): SessionMessageUser {
   return { id: `msg-user-${created}`, time: { created }, type: "user", text };
+}
+
+export interface SyntheticValues {
+  id?: string;
+  created?: number;
+  text?: string;
+  description?: string;
+}
+
+export function makeSynthetic(values: SyntheticValues = {}): SessionMessageSynthetic {
+  const message: SessionMessageSynthetic = {
+    id: values.id ?? "msg-synthetic",
+    time: { created: values.created ?? 0 },
+    type: "synthetic",
+    text: values.text ?? "Continue",
+  };
+  if (values.description !== undefined) message.description = values.description;
+  return message;
+}
+
+export interface AgentValues {
+  id?: string;
+  name?: string;
+}
+
+export function makeAgent(values: AgentValues = {}): AgentInfo {
+  return {
+    id: values.id ?? "build",
+    name: values.name ?? "build",
+    request: { settings: {}, headers: {}, body: {} },
+    mode: "primary",
+    hidden: false,
+    permissions: [],
+  };
 }
 
 export function makeError(

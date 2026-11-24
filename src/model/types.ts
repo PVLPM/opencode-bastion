@@ -38,17 +38,23 @@ export interface LineStats {
 
 export interface AgentView {
   readonly sessionID: string;
-  /** Agent display name, e.g. "Fixer". */
+  /** Capitalized agent display name, e.g. "Fixer"; the agent id is never mutated. */
   readonly agent: string;
-  /** Session title, e.g. "Implement pricing table". */
+  /** Stored session title without the native subagent suffix; stable across follow-ups. */
   readonly title: string | undefined;
   readonly model: ModelLabel | undefined;
+  /** The model variant (reasoning effort) actually used, e.g. "medium"; absent when unknown. */
+  readonly effort: string | undefined;
   readonly status: AgentStatus;
   /** Why the status is what it is, e.g. "Waiting for permission", "Interrupted". */
   readonly statusDetail: string | undefined;
   /** One-line Activity Ticker text, e.g. "Editing session.ts". */
   readonly activity: string | undefined;
-  /** The delegation's short description, from the orchestrator's subagent call. */
+  /**
+   * The latest task: for a subagent, the description of the newest parent→child
+   * subagent call (follow-ups replace it); for the orchestrator, the first line
+   * of its latest user prompt. Never the session title.
+   */
   readonly task: string | undefined;
   readonly startedAt: number | undefined;
   /** Set once the session is idle. */
@@ -69,6 +75,58 @@ export interface FleetView {
   readonly inactive: readonly AgentView[];
   /** Whole-family cost (root plus every descendant), never summed twice. */
   readonly totalCost: Money | undefined;
+}
+
+/**
+ * One confirmed execution of a session: from the first assistant turn after the
+ * previous idle marker to the idle marker that closed it. Never inferred from
+ * event silence.
+ */
+export interface LaneBlock {
+  /** Stable across updates: `${sessionID}:${id of the message that opened it}`. */
+  readonly id: string;
+  readonly start: number;
+  /** Absent while the execution is live; the renderer extends it to `now`. */
+  readonly end: number | undefined;
+  /**
+   * "running"/"waiting" only for the live block; closed blocks carry the idle
+   * outcome ("done", "failed", "unknown" for interrupted), or "unknown" when the
+   * history holds no closing idle marker.
+   */
+  readonly status: AgentStatus;
+  /** Delegated task (subagent) or prompt first line (orchestrator); absent when unknown. */
+  readonly label: string | undefined;
+}
+
+export interface Lane {
+  readonly sessionID: string;
+  /** Capitalized agent display name, same as the card's. */
+  readonly agent: string;
+  readonly title: string | undefined;
+  readonly root: boolean;
+  /** Oldest first, non-overlapping. */
+  readonly blocks: readonly LaneBlock[];
+}
+
+/** A confirmed parent→child subagent call, drawn as a connector between lanes. */
+export interface Handoff {
+  /** The root transcript's subagent tool-part id. */
+  readonly id: string;
+  readonly childID: string;
+  /** When the call was issued (tool part time). */
+  readonly at: number;
+  /** The child block the call fed: the block running at `at`, else the next to start. */
+  readonly blockID: string | undefined;
+  /** "followup" when the child already had a call before this one. */
+  readonly kind: "delegate" | "followup";
+}
+
+export interface LanesView {
+  /** Orchestrator first, then children by first execution start; never reordered by status. */
+  readonly lanes: readonly Lane[];
+  readonly handoffs: readonly Handoff[];
+  /** Earliest block start; absent when no block exists. */
+  readonly from: number | undefined;
 }
 
 /** A pulse along one connection line, derived only from observed transitions. */

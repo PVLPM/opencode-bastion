@@ -36,9 +36,35 @@ const toolCases: readonly ToolCase[] = [
     expected: "Editing files",
   },
   {
-    name: "shell never shows its description",
-    tool: { name: "shell", input: { description: "rm -rf /secret", command: "cat token" } },
+    name: "shell prefers the tool's own concise description",
+    tool: { name: "shell", input: { description: "Run the test suite", command: "pnpm test" } },
+    expected: "Run the test suite",
+  },
+  {
+    name: "shell falls back when the description is blank",
+    tool: { name: "shell", input: { description: "  \n ", command: "pnpm test" } },
     expected: "Running command",
+  },
+  {
+    name: "subagent keeps delegating even with a description",
+    tool: {
+      name: "subagent",
+      input: { agent: "designer", description: "Polish the panel" },
+    },
+    expected: "Delegating to Designer",
+  },
+  {
+    name: "legacy task keeps delegating with the capitalized target",
+    tool: {
+      name: "task",
+      input: { subagent_type: "release-engineer", description: "Ship it" },
+    },
+    expected: "Delegating to Release-engineer",
+  },
+  {
+    name: "legacy bash prefers its description",
+    tool: { name: "bash", input: { description: "Run the tests", command: "pnpm test" } },
+    expected: "Run the tests",
   },
   {
     name: "shell without input",
@@ -83,7 +109,7 @@ const toolCases: readonly ToolCase[] = [
   {
     name: "subagent",
     tool: { name: "subagent", input: { agent: "designer" } },
-    expected: "Delegating to designer",
+    expected: "Delegating to Designer",
   },
   {
     name: "skill",

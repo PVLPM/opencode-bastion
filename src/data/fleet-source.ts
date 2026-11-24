@@ -11,9 +11,10 @@ import type { Data } from "@opencode/client/solid";
 import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from "solid-js";
 
 import { detectBeams, subagentCalls, type SubagentCall } from "../model/delegations";
-import { buildFleet, type SessionSnapshot } from "../model/fleet";
+import { buildFleet, sessionTitle, type SessionSnapshot } from "../model/fleet";
+import { deriveLanes, type LaneSession } from "../model/lanes";
 import { resolveCost, type PriceTable } from "../model/pricing";
-import type { Beam, FleetView, LineStats, Money } from "../model/types";
+import type { AgentStatus, Beam, FleetView, LanesView, LineStats, Money } from "../model/types";
 import { tokenTotal } from "../model/usage";
 
 export interface FleetData {
@@ -57,6 +58,7 @@ export interface FleetHost {
 
 export interface FleetSource {
   readonly fleet: Accessor<FleetView | undefined>;
+  readonly lanes: Accessor<LanesView | undefined>;
   readonly beams: Accessor<readonly Beam[]>;
   readonly now: Accessor<number>;
   canOpen(sessionID: string): boolean;
@@ -135,7 +137,7 @@ function modelFor(data: FleetData, location: LocationRef, ref: ModelRef): ModelI
 
 function agentNameFor(data: FleetData, info: SessionInfo): string {
   const agent = data.location.agent.list(info.location)?.find((entry) => entry.id === info.agent);
-  return agent?.name ?? capitalize(info.agent ?? "unknown");
+  return capitalize(agent?.name ?? info.agent ?? "unknown");
 }
 
 function latestSnapshotKey(messages: readonly SessionMessageInfo[]): number | undefined {
@@ -365,6 +367,29 @@ export function createFleetSource(host: FleetHost): FleetSource {
     });
   });
 
+  const lanes = createMemo<LanesView | undefined>(() => {
+    const current = family();
+    const view = fleet();
+    if (current === undefined || view === undefined) return undefined;
+    const data = current.data;
+    const statuses = new Map<string, AgentStatus>();
+    for (const agent of [view.root, ...view.active, ...view.inactive]) {
+      statuses.set(agent.sessionID, agent.status);
+    }
+    const laneSession = (info: SessionInfo): LaneSession => ({
+      info,
+      running: data.session.status(info.id) === "running",
+      waiting: statuses.get(info.id) === "waiting",
+      messages: data.session.message.list(info.id),
+    });
+    return deriveLanes({
+      root: laneSession(current.root),
+      children: current.children.map(laneSession),
+      agentName: (info) => agentNameFor(data, info),
+      title: (info) => sessionTitle(info.title),
+    });
+  });
+
   function setLine(key: string, value: LineStats | undefined): void {
     setLines((current) => {
       if (current.get(key) === value) return current;
@@ -456,5 +481,5 @@ export function createFleetSource(host: FleetHost): FleetSource {
     host.openTab(currentFamily.serverID, sessionID);
   }
 
-  return { fleet, beams, now, canOpen, open };
+  return { fleet, lanes, beams, now, canOpen, open };
 }

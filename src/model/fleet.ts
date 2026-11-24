@@ -5,8 +5,8 @@ import type {
   TokenUsageInfo,
 } from "@opencode/client/promise";
 
-import { deriveActivity } from "./activity";
-import { delegations, type Delegation } from "./delegations";
+import { deriveActivity, firstLine } from "./activity";
+import { delegations } from "./delegations";
 import { deriveStatus } from "./status";
 import type { AgentView, FleetView, LineStats, ModelLabel, Money } from "./types";
 import { contextUsage, sessionInterval, tokenTotal } from "./usage";
@@ -76,14 +76,31 @@ function familyTotal(
 /** The desktop stores child titles as `<description> (@<agent> subagent)`. */
 const SUBAGENT_SUFFIX = /\s+\(@[^)]+ subagent\)$/u;
 
-function sessionTitle(title: string | undefined): string | undefined {
+export function sessionTitle(title: string | undefined): string | undefined {
   return title?.replace(SUBAGENT_SUFFIX, "");
+}
+
+function latestAssistantVariant(messages: readonly SessionMessageInfo[]): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.type === "assistant") return message.model.variant;
+  }
+  return undefined;
+}
+
+/** The orchestrator's task is the latest prompt, never the session title. */
+function latestUserTask(messages: readonly SessionMessageInfo[]): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.type === "user") return firstLine(message.text);
+  }
+  return undefined;
 }
 
 function agentView(
   input: FleetInput,
   snapshot: SessionSnapshot,
-  task: Delegation | undefined,
+  task: string | undefined,
   costs: ReadonlyMap<string, Money | undefined>,
 ): AgentView {
   const derived = deriveStatus({
@@ -99,10 +116,11 @@ function agentView(
     agent: input.agentName(snapshot.info),
     title: sessionTitle(snapshot.info.title),
     model: input.modelLabel(snapshot.info.location, snapshot.info.model),
+    effort: latestAssistantVariant(snapshot.messages) ?? snapshot.info.model?.variant,
     status: derived.status,
     statusDetail: derived.detail,
     activity: deriveActivity(snapshot.messages, derived.status, derived.detail),
-    task: task?.description,
+    task,
     startedAt: interval.startedAt,
     endedAt: interval.endedAt,
     cost: costs.get(snapshot.info.id),
@@ -140,9 +158,9 @@ export function buildFleet(input: FleetInput): FleetView {
   const costs = new Map<string, Money | undefined>();
   for (const [id, snapshot] of members) costs.set(id, memberCost(input, snapshot.info));
 
-  const root = agentView(input, input.root, undefined, costs);
+  const root = agentView(input, input.root, latestUserTask(input.root.messages), costs);
   const children = input.children.map((snapshot) =>
-    agentView(input, snapshot, tasks.get(snapshot.info.id), costs),
+    agentView(input, snapshot, tasks.get(snapshot.info.id)?.description, costs),
   );
   const active = children.filter(isActive).toSorted(byStartedAt);
   const inactive = children.filter((child) => !isActive(child)).toSorted(byEndedAt);

@@ -10,7 +10,16 @@ import {
   type FleetSource,
 } from "../../src/data/fleet-source";
 import type { PriceTable } from "../../src/model/pricing";
-import { makeAssistant, makeModel, makeSession, makeTokens, makeTool } from "../fixtures";
+import {
+  makeAgent,
+  makeAssistant,
+  makeIdle,
+  makeModel,
+  makeSession,
+  makeTokens,
+  makeTool,
+  makeUser,
+} from "../fixtures";
 import { createFakeHost } from "./fake-host";
 
 const flush = (): Promise<void> =>
@@ -509,6 +518,58 @@ describe("createFleetSource lines", () => {
       await flush();
       expect(fake.calls.diffCalls).toHaveLength(2);
       expect(source.fleet()?.root.lines).toStrictEqual({ added: 5, removed: 1 });
+    });
+  });
+});
+
+describe("createFleetSource lanes", () => {
+  it("derives lanes and the capitalized agent from the same store reads as the fleet", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      agents: [makeAgent({ id: "fixer", name: "code-fixer" })],
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root", agent: "fixer", title: "Root task", created: 10 }),
+          messages: [
+            makeUser(20, "First prompt"),
+            makeAssistant({ id: "root-a1", created: 30 }),
+            makeIdle("succeeded", undefined, 40),
+          ],
+        },
+        {
+          info: makeSession({
+            id: "ses-child",
+            parentID: "ses-root",
+            agent: "fixer",
+            created: 5,
+          }),
+          status: "running",
+          messages: [makeAssistant({ id: "child-a1", created: 50 })],
+        },
+      ],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+
+      expect(source.fleet()?.root.agent).toBe("Code-fixer");
+      expect(source.lanes()?.lanes[0]?.agent).toBe("Code-fixer");
+      expect(source.lanes()?.lanes.map((lane) => lane.sessionID)).toStrictEqual([
+        "ses-root",
+        "ses-child",
+      ]);
+      expect(source.lanes()?.lanes[0]?.blocks[0]).toMatchObject({
+        start: 30,
+        end: 40,
+        status: "done",
+        label: "First prompt",
+      });
+      expect(source.lanes()?.lanes[1]?.blocks[0]).toMatchObject({
+        start: 50,
+        end: undefined,
+        status: "running",
+      });
+      expect(source.lanes()?.from).toBe(30);
     });
   });
 });

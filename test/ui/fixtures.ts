@@ -12,6 +12,7 @@ function testAgent(init: AgentInit): AgentView {
     agent: "Agent",
     title: undefined,
     model: { providerID: "anthropic", modelID: "claude-opus-4-5", name: "Opus 5.5" },
+    effort: undefined,
     status: "running",
     statusDetail: undefined,
     activity: undefined,

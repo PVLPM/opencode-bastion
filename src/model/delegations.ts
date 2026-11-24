@@ -9,8 +9,19 @@ export interface Delegation {
   description: string | undefined;
 }
 
-export function delegations(rootMessages: readonly SessionMessageInfo[]): Map<string, Delegation> {
-  const found = new Map<string, Delegation>();
+export interface DelegationCall {
+  /** Tool-part id; stable across updates. */
+  readonly toolID: string;
+  readonly childID: string;
+  readonly agent: string;
+  readonly description: string | undefined;
+  /** The tool's run time, else creation time; absent when neither is finite. */
+  readonly at: number | undefined;
+}
+
+/** Every confirmed subagent call in transcript order, including follow-ups. */
+export function delegationCalls(rootMessages: readonly SessionMessageInfo[]): DelegationCall[] {
+  const calls: DelegationCall[] = [];
   for (const message of rootMessages) {
     if (message.type !== "assistant") continue;
     for (const part of message.content) {
@@ -18,12 +29,28 @@ export function delegations(rootMessages: readonly SessionMessageInfo[]): Map<st
       if (part.state.status === "streaming") continue;
       const childID = jsonText(part.state.metadata?.sessionID);
       if (childID === undefined) continue;
-      found.set(childID, {
+      const ran = part.time.ran;
+      const at = ran !== undefined && Number.isFinite(ran) ? ran : part.time.created;
+      calls.push({
         toolID: part.id,
+        childID,
         agent: jsonText(part.state.input.agent) ?? "subagent",
         description: jsonText(part.state.input.description),
+        at: Number.isFinite(at) ? at : undefined,
       });
     }
+  }
+  return calls;
+}
+
+export function delegations(rootMessages: readonly SessionMessageInfo[]): Map<string, Delegation> {
+  const found = new Map<string, Delegation>();
+  for (const call of delegationCalls(rootMessages)) {
+    found.set(call.childID, {
+      toolID: call.toolID,
+      agent: call.agent,
+      description: call.description,
+    });
   }
   return found;
 }
