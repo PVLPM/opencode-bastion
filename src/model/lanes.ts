@@ -56,29 +56,43 @@ function outcomeStatus(outcome: SessionMessageIdle["outcome"]): AgentStatus {
   return "unknown";
 }
 
-/** The full prompt before a root block opened: a user message or a synthetic one. */
-function promptText(messages: readonly SessionMessageInfo[], index: number): string | undefined {
-  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
-    const message = messages[cursor];
-    if (message === undefined) continue;
-    if (message.type === "user") return nonEmpty(message.text);
-    if (message.type === "synthetic") {
-      return nonEmpty(message.description) ?? nonEmpty(message.text);
-    }
+interface PromptDraft {
+  readonly id: string;
+  readonly text: string | undefined;
+  readonly at: number;
+}
+
+function promptOf(message: SessionMessageInfo): PromptDraft | undefined {
+  if (message.type === "user") {
+    return { id: message.id, text: nonEmpty(message.text), at: message.time.created };
+  }
+  if (message.type === "synthetic") {
+    return {
+      id: message.id,
+      text: nonEmpty(message.description) ?? nonEmpty(message.text),
+      at: message.time.created,
+    };
   }
   return undefined;
 }
 
-/** The first prompt after the last idle: the message that started the live run. */
-function triggerMessage(messages: readonly SessionMessageInfo[]): SessionMessageInfo | undefined {
-  let trigger: SessionMessageInfo | undefined;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
+/**
+ * The first prompt after the last idle: the message that started the run. An
+ * idle marker is a hard boundary, so an older prompt never labels a new block.
+ */
+function promptBefore(
+  messages: readonly SessionMessageInfo[],
+  index: number,
+): PromptDraft | undefined {
+  let prompt: PromptDraft | undefined;
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const message = messages[cursor];
     if (message === undefined) continue;
     if (message.type === "idle") break;
-    if (message.type === "user" || message.type === "synthetic") trigger = message;
+    const candidate = promptOf(message);
+    if (candidate !== undefined) prompt = candidate;
   }
-  return trigger;
+  return prompt;
 }
 
 /**
@@ -87,7 +101,7 @@ function triggerMessage(messages: readonly SessionMessageInfo[]): SessionMessage
  */
 function deriveBlocks(
   session: LaneSession,
-  textFor: ((index: number) => string | undefined) | undefined,
+  promptAt: ((index: number) => PromptDraft | undefined) | undefined,
 ): DraftBlock[] {
   const blocks: DraftBlock[] = [];
   let open: DraftBlock | undefined;
@@ -99,14 +113,14 @@ function deriveBlocks(
     if (message.type === "assistant") {
       if (!Number.isFinite(message.time.created)) continue;
       if (open === undefined) {
-        const text = textFor?.(index);
+        const prompt = promptAt?.(index);
         open = {
-          id: `${session.info.id}:${message.id}`,
+          id: `${session.info.id}:${prompt?.id ?? message.id}`,
           start: message.time.created,
           end: undefined,
           status: "unknown",
-          label: firstLine(text),
-          text,
+          label: firstLine(prompt?.text),
+          text: prompt?.text,
         };
         blocks.push(open);
       }
@@ -115,23 +129,26 @@ function deriveBlocks(
     }
     if (message.type !== "idle" || open === undefined) continue;
     const end = message.time.created;
-    if (!Number.isFinite(end) || end < open.start) continue;
-    open.end = end;
-    open.status = outcomeStatus(message.outcome);
+    if (!Number.isFinite(end)) continue;
+    // Message order is the boundary even when timestamps disagree; the outcome
+    // cannot be trusted when the idle claims to precede the block it closed.
+    const early = end < open.start;
+    open.end = early ? open.start : end;
+    open.status = early ? "unknown" : outcomeStatus(message.outcome);
     open = undefined;
     lastAssistant = undefined;
   }
 
   if (open === undefined && session.running) {
-    const trigger = triggerMessage(session.messages);
-    if (trigger !== undefined && Number.isFinite(trigger.time.created)) {
+    const prompt = promptAt?.(session.messages.length);
+    if (prompt !== undefined && Number.isFinite(prompt.at)) {
       open = {
-        id: `${session.info.id}:${trigger.id}`,
-        start: trigger.time.created,
+        id: `${session.info.id}:${prompt.id}`,
+        start: prompt.at,
         end: undefined,
         status: session.waiting ? "waiting" : "running",
-        label: undefined,
-        text: undefined,
+        label: firstLine(prompt.text),
+        text: prompt.text,
       };
       blocks.push(open);
     }
@@ -142,10 +159,11 @@ function deriveBlocks(
       open.status = session.waiting ? "waiting" : "running";
     } else if (lastAssistant !== undefined) {
       const completed = lastAssistant.time.completed;
-      open.end =
+      const end =
         completed !== undefined && Number.isFinite(completed)
           ? completed
           : lastAssistant.time.created;
+      open.end = Math.max(end, open.start);
       open.status = "unknown";
     }
   }
@@ -236,7 +254,7 @@ function laneView(
 }
 
 export function deriveLanes(input: LanesInput): LanesView {
-  const rootBlocks = deriveBlocks(input.root, (index) => promptText(input.root.messages, index));
+  const rootBlocks = deriveBlocks(input.root, (index) => promptBefore(input.root.messages, index));
   const childLanes = input.children.map((session) => ({
     session,
     blocks: deriveBlocks(session, undefined),

@@ -1,6 +1,7 @@
+import type { JsonValue } from "@opencode/client/promise";
 import { describe, expect, it } from "vitest";
 
-import { deriveActivity, firstLine } from "../../src/model/activity";
+import { deriveActivity, firstLine, jsonText } from "../../src/model/activity";
 import type { AgentStatus } from "../../src/model/types";
 import { makeAssistant, makeError, makeTool } from "../fixtures";
 
@@ -14,6 +15,23 @@ describe("firstLine", () => {
     ["  \n ", undefined],
   ])("%j → %j", (text, expected) => {
     expect(firstLine(text)).toBe(expected);
+  });
+});
+
+describe("jsonText", () => {
+  const cases: readonly (readonly [string, JsonValue | undefined, string | undefined])[] = [
+    ["a JSON string", "text", "text"],
+    ["a number", 1, undefined],
+    ["a boolean", true, undefined],
+    ["null", null, undefined],
+    ["undefined", undefined, undefined],
+    ["an array", ["text"], undefined],
+    ["an object", { text: "value" }, undefined],
+    ["an object whose toString is null", { toString: null }, undefined],
+  ];
+
+  it.each(cases)("returns only strings for %s", (_name, value, expected) => {
+    expect(jsonText(value)).toBe(expected);
   });
 });
 
@@ -41,7 +59,12 @@ const toolCases: readonly ToolCase[] = [
   {
     name: "write keeps only the basename",
     tool: { name: "write", input: { filePath: "/project/src/session.ts" } },
-    expected: "Editing session.ts",
+    expected: "Writing session.ts",
+  },
+  {
+    name: "write without a path",
+    tool: { name: "write", input: {} },
+    expected: "Writing files",
   },
   {
     name: "patch without a path",
@@ -56,7 +79,77 @@ const toolCases: readonly ToolCase[] = [
   {
     name: "shell falls back when the description is blank",
     tool: { name: "shell", input: { description: "  \n ", command: "pnpm test" } },
-    expected: "Running command",
+    expected: "Running tests",
+  },
+  {
+    name: "shell classifies a test runner",
+    tool: { name: "shell", input: { command: "pnpm vitest run test/model" } },
+    expected: "Running tests",
+  },
+  {
+    name: "shell classifies an install",
+    tool: { name: "shell", input: { command: "pnpm add -D vitest" } },
+    expected: "Installing packages",
+  },
+  {
+    name: "shell classifies a build",
+    tool: { name: "shell", input: { command: "pnpm build" } },
+    expected: "Building",
+  },
+  {
+    name: "shell classifies linting",
+    tool: { name: "shell", input: { command: "pnpm exec oxlint -c .oxlintrc.json ." } },
+    expected: "Linting",
+  },
+  {
+    name: "shell classifies formatting",
+    tool: { name: "shell", input: { command: "pnpm format:check" } },
+    expected: "Formatting",
+  },
+  {
+    name: "shell classifies a typecheck",
+    tool: { name: "shell", input: { command: "tsc --noEmit" } },
+    expected: "Type-checking",
+  },
+  {
+    name: "shell classifies a git inspection",
+    tool: { name: "shell", input: { command: "git status --short" } },
+    expected: "Checking changes",
+  },
+  {
+    name: "shell classifies a git write",
+    tool: { name: "shell", input: { command: 'git commit -m "Update pricing"' } },
+    expected: "Updating git",
+  },
+  {
+    name: "shell classifies a search",
+    tool: { name: "shell", input: { command: "rg canonical src" } },
+    expected: "Searching files",
+  },
+  {
+    name: "shell classifies a directory listing",
+    tool: { name: "shell", input: { command: "ls -la src" } },
+    expected: "Listing files",
+  },
+  {
+    name: "shell classifies a file read",
+    tool: { name: "shell", input: { command: "cat package.json" } },
+    expected: "Reading files",
+  },
+  {
+    name: "shell classifies a network fetch",
+    tool: { name: "shell", input: { command: "curl https://example.com/api?q=secret" } },
+    expected: "Fetching a URL",
+  },
+  {
+    name: "shell classifies through a cd and export prefix",
+    tool: { name: "shell", input: { command: "cd C:\\project && pnpm test" } },
+    expected: "Running tests",
+  },
+  {
+    name: "shell falls back for an unknown command",
+    tool: { name: "shell", input: { command: "./deploy.sh --production" } },
+    expected: "Running Shell",
   },
   {
     name: "subagent keeps delegating even with a description",
@@ -80,9 +173,14 @@ const toolCases: readonly ToolCase[] = [
     expected: "Run the tests",
   },
   {
+    name: "legacy bash classifies its command",
+    tool: { name: "bash", input: { command: "npm run build" } },
+    expected: "Building",
+  },
+  {
     name: "shell without input",
     tool: { name: "shell", input: {} },
-    expected: "Running command",
+    expected: "Running Shell",
   },
   {
     name: "grep never shows its pattern",
@@ -142,13 +240,28 @@ const toolCases: readonly ToolCase[] = [
   {
     name: "streaming tool",
     tool: { name: "shell", status: "streaming", text: '{"command":' },
-    expected: "Running command",
+    expected: "Running Shell",
   },
 ];
 
 describe("deriveActivity tool details", () => {
   it.each(toolCases)("$name", ({ tool, expected }) => {
     expect(running(tool)).toBe(expected);
+  });
+});
+
+describe("deriveActivity command privacy", () => {
+  const cases: readonly (readonly [string, string, string])[] = [
+    ["a search command", "rg secret-token src", "Searching files"],
+    ["a git commit message", 'git commit -m "secret-token"', "Updating git"],
+    ["an unknown command", "./deploy.sh --token secret-token", "Running Shell"],
+  ];
+
+  it.each(cases)("never echoes %s", (_name, command, expected) => {
+    const activity = running({ name: "shell", input: { command } });
+
+    expect(activity).toBe(expected);
+    expect(activity).not.toContain("secret-token");
   });
 });
 

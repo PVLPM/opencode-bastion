@@ -47,9 +47,12 @@ function subagentCall(
   });
 }
 
-function messageWithSnapshot(completed: number): SessionMessageInfo {
+function messageWithSnapshot(
+  completed: number,
+  files: readonly string[] = ["src/a.ts"],
+): SessionMessageInfo {
   const message = makeAssistant({ created: completed, completed });
-  message.snapshot = { files: ["src/a.ts"] };
+  message.snapshot = { files: [...files] };
   return message;
 }
 
@@ -510,7 +513,7 @@ describe("createFleetSource navigation", () => {
 });
 
 describe("createFleetSource lines", () => {
-  it("refetches only when the latest snapshot-bearing assistant changes", async () => {
+  it("refetches when the latest completed assistant changes", async () => {
     let additions = 2;
     const fake = createFakeHost({
       routed: "ses-root",
@@ -528,13 +531,125 @@ describe("createFleetSource lines", () => {
 
       fake.addMessage("ses-root", makeAssistant({ created: 150, completed: 150 }));
       await flush();
-      expect(fake.calls.diffCalls).toHaveLength(1);
+      expect(fake.calls.diffCalls).toHaveLength(2);
 
       additions = 5;
       fake.addMessage("ses-root", messageWithSnapshot(200));
       await flush();
-      expect(fake.calls.diffCalls).toHaveLength(2);
+      expect(fake.calls.diffCalls).toHaveLength(3);
       expect(source.fleet()?.root.lines).toStrictEqual({ added: 5, removed: 1 });
+    });
+  });
+
+  it("requests the diff when the completed assistant has no snapshot files", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root" }),
+          messages: [makeAssistant({ created: 100, completed: 100 })],
+        },
+      ],
+      diff: () =>
+        Promise.resolve([
+          { file: "src/a.ts", patch: "", additions: 4, deletions: 2, status: "modified" },
+        ]),
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(fake.calls.diffCalls).toStrictEqual(["ses-root"]);
+      expect(source.fleet()?.root.lines).toStrictEqual({ added: 4, removed: 2 });
+    });
+  });
+
+  it("skips the diff when the completed assistant explicitly lists no files", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root" }),
+          messages: [messageWithSnapshot(100, [])],
+        },
+      ],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(fake.calls.diffCalls).toStrictEqual([]);
+      expect(source.fleet()?.root.lines).toBeUndefined();
+    });
+  });
+
+  it("keeps the last known stats when a later turn reports no changed files", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root" }),
+          messages: [messageWithSnapshot(100)],
+        },
+      ],
+      diff: () =>
+        Promise.resolve([
+          { file: "src/a.ts", patch: "", additions: 3, deletions: 2, status: "modified" },
+        ]),
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(fake.calls.diffCalls).toStrictEqual(["ses-root"]);
+      expect(source.fleet()?.root.lines).toStrictEqual({ added: 3, removed: 2 });
+
+      fake.addMessage("ses-root", messageWithSnapshot(200, []));
+      await flush();
+      expect(fake.calls.diffCalls).toStrictEqual(["ses-root"]);
+      expect(source.fleet()?.root.lines).toStrictEqual({ added: 3, removed: 2 });
+    });
+  });
+
+  it("does not refetch when the latest completed time is unchanged", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root" }),
+          messages: [makeAssistant({ created: 100, completed: 100 })],
+        },
+      ],
+      diff: () =>
+        Promise.resolve([
+          { file: "src/a.ts", patch: "", additions: 1, deletions: 1, status: "modified" },
+        ]),
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(fake.calls.diffCalls).toHaveLength(1);
+
+      fake.addMessage("ses-root", makeAssistant({ created: 200 }));
+      await flush();
+      expect(fake.calls.diffCalls).toHaveLength(1);
+      expect(source.fleet()?.root.lines).toStrictEqual({ added: 1, removed: 1 });
+    });
+  });
+
+  it("hides the counter when the diff request fails", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root" }),
+          messages: [messageWithSnapshot(100)],
+        },
+      ],
+      diff: () => Promise.reject(new Error("diff failed")),
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(fake.calls.diffCalls).toStrictEqual(["ses-root"]);
+      expect(source.fleet()?.root.lines).toBeUndefined();
     });
   });
 });
@@ -620,6 +735,34 @@ describe("createFleetSource clock", () => {
       vi.useRealTimers();
     }
   });
+
+  it("holds the clock while the panel is hidden and seeds it when visible again", async () => {
+    vi.useFakeTimers();
+    try {
+      const fake = createFakeHost({
+        routed: "ses-root",
+        visible: false,
+        sessions: [{ info: makeSession({ id: "ses-root" }), status: "running" }],
+      });
+
+      await withSource(fake.host, async (source) => {
+        await vi.advanceTimersByTimeAsync(0);
+        const hiddenNow = source.now();
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(source.now()).toBe(hiddenNow);
+
+        fake.setVisible(true);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(source.now()).toBe(Date.now());
+        expect(source.now()).toBeGreaterThan(hiddenNow);
+
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(source.now()).toBeGreaterThan(hiddenNow + 5_000);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("createFleetSource prices", () => {
@@ -689,6 +832,36 @@ describe("createFleetSource prices", () => {
       await flush();
       expect(fake.calls.priceFetches()).toBe(0);
       expect(source.fleet()?.root.cost).toStrictEqual({ usd: 0.5, estimated: false });
+    });
+  });
+
+  it("estimates a claude-agent model at Anthropic API list price", async () => {
+    const table = {
+      anthropic: {
+        models: { "claude-sonnet-4-5": { cost: { input: 3, output: 15 } } },
+      },
+      openrouter: {
+        models: { "claude-sonnet-4-5": { cost: { input: 4, output: 20 } } },
+      },
+    } satisfies PriceTable;
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({
+            id: "ses-root",
+            tokens: makeTokens({ input: 1_000_000, output: 1_000_000 }),
+            model: { id: "claude-sonnet-4-5", providerID: "claude-agent" },
+          }),
+        },
+      ],
+      prices: () => Promise.resolve(table),
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      await flush();
+      expect(source.fleet()?.root.cost).toStrictEqual({ usd: 18, estimated: true });
     });
   });
 

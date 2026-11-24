@@ -62,7 +62,7 @@ describe("deriveLanes execution blocks", () => {
 
     expect(view.lanes[0]?.blocks).toStrictEqual([
       {
-        id: "ses-root:a1",
+        id: "ses-root:msg-user-10",
         start: 20,
         end: 40,
         status: "done",
@@ -88,9 +88,16 @@ describe("deriveLanes execution blocks", () => {
     const blocks = deriveLanes(lanesInput({ root })).lanes[0]?.blocks;
 
     expect(blocks).toStrictEqual([
-      { id: "ses-root:a1", start: 20, end: 30, status: "done", label: "First", text: "First" },
       {
-        id: "ses-root:a2",
+        id: "ses-root:msg-user-10",
+        start: 20,
+        end: 30,
+        status: "done",
+        label: "First",
+        text: "First",
+      },
+      {
+        id: "ses-root:msg-user-100",
         start: 110,
         end: 120,
         status: "failed",
@@ -122,6 +129,8 @@ describe("deriveLanes execution blocks", () => {
     readonly prompt: SessionMessageInfo;
     readonly waiting: boolean;
     readonly status: AgentStatus;
+    readonly label: string;
+    readonly text: string;
   }
 
   const triggerCases: readonly TriggerCase[] = [
@@ -130,18 +139,24 @@ describe("deriveLanes execution blocks", () => {
       prompt: makeUser(30, "Next task"),
       waiting: false,
       status: "running",
+      label: "Next task",
+      text: "Next task",
     },
     {
       name: "a waiting session",
       prompt: makeUser(30, "Next task"),
       waiting: true,
       status: "waiting",
+      label: "Next task",
+      text: "Next task",
     },
     {
       name: "a running session with a synthetic prompt",
       prompt: makeSynthetic({ id: "msg-synthetic", created: 30, text: "Continue" }),
       waiting: false,
       status: "running",
+      label: "Continue",
+      text: "Continue",
     },
   ];
 
@@ -149,6 +164,8 @@ describe("deriveLanes execution blocks", () => {
     prompt,
     waiting,
     status,
+    label,
+    text,
   }) => {
     const root = laneSession({
       running: true,
@@ -176,10 +193,59 @@ describe("deriveLanes execution blocks", () => {
         start: 30,
         end: undefined,
         status,
-        label: undefined,
-        text: undefined,
+        label,
+        text,
       },
     ]);
+  });
+
+  it("keeps the trigger block's id and prompt when its first assistant arrives", () => {
+    const prompt = makeUser(30, "Next task");
+    const before = laneSession({
+      running: true,
+      messages: [makeIdle("succeeded", undefined, 20), prompt],
+    });
+    const after = laneSession({
+      running: true,
+      messages: [
+        makeIdle("succeeded", undefined, 20),
+        prompt,
+        makeAssistant({ id: "a1", created: 40 }),
+      ],
+    });
+
+    const beforeBlock = deriveLanes(lanesInput({ root: before })).lanes[0]?.blocks[0];
+    const afterBlock = deriveLanes(lanesInput({ root: after })).lanes[0]?.blocks[0];
+
+    expect(beforeBlock).toMatchObject({
+      id: `ses-root:${prompt.id}`,
+      label: "Next task",
+      text: "Next task",
+    });
+    expect(afterBlock).toMatchObject({
+      id: `ses-root:${prompt.id}`,
+      label: "Next task",
+      text: "Next task",
+    });
+  });
+
+  it("does not label a block with a prompt from before an idle boundary", () => {
+    const root = laneSession({
+      messages: [
+        makeUser(10, "Old task"),
+        makeAssistant({ id: "a1", created: 20 }),
+        makeIdle("succeeded", undefined, 30),
+        makeAssistant({ id: "a2", created: 40 }),
+      ],
+    });
+
+    const block = deriveLanes(lanesInput({ root })).lanes[0]?.blocks[1];
+
+    expect(block).toMatchObject({
+      id: "ses-root:a2",
+      label: undefined,
+      text: undefined,
+    });
   });
 
   it("keeps tool calls and later assistants inside one block", () => {
@@ -208,6 +274,7 @@ describe("deriveLanes execution blocks", () => {
   const missingIdleCases: readonly (readonly [string, number | undefined, number])[] = [
     ["uses the last assistant completion", 35, 35],
     ["falls back to the last assistant start", undefined, 20],
+    ["ignores a completion before the block start", 10, 20],
   ];
 
   it.each(
@@ -223,6 +290,21 @@ describe("deriveLanes execution blocks", () => {
       id: "ses-root:a1",
       start: 20,
       end: expectedEnd,
+      status: "unknown",
+      label: undefined,
+      text: undefined,
+    });
+  });
+
+  it("closes a block at its start when the idle timestamp precedes it", () => {
+    const root = laneSession({
+      messages: [makeAssistant({ id: "a1", created: 20 }), makeIdle("succeeded", undefined, 10)],
+    });
+
+    expect(deriveLanes(lanesInput({ root })).lanes[0]?.blocks[0]).toStrictEqual({
+      id: "ses-root:a1",
+      start: 20,
+      end: 20,
       status: "unknown",
       label: undefined,
       text: undefined,

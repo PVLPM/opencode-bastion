@@ -188,10 +188,16 @@ describe("buildFleet", () => {
       expected: "medium",
     },
     {
-      name: "falls back to the session model variant",
+      name: "does not fall back to the session model variant",
       sessionModel: model("medium"),
       messages: [makeAssistant({ model: model() })],
-      expected: "medium",
+      expected: undefined,
+    },
+    {
+      name: "is undefined before the first assistant",
+      sessionModel: model("medium"),
+      messages: [],
+      expected: undefined,
     },
     {
       name: "does not inherit an older assistant's variant",
@@ -207,6 +213,47 @@ describe("buildFleet", () => {
     const fleet = buildFleet(fleetInput({ root: snapshot(values) }));
 
     expect(fleet.root.effort).toBe(expected);
+  });
+
+  interface ModelSourceCase {
+    readonly name: string;
+    readonly sessionModel: ModelRef;
+    readonly messages: readonly SessionMessageInfo[];
+    readonly expectedRef: ModelRef;
+    readonly expectedEffort: string | undefined;
+  }
+
+  const modelSourceCases: readonly ModelSourceCase[] = [
+    {
+      name: "uses the latest assistant ref for both model and effort",
+      sessionModel: model("session"),
+      messages: [makeAssistant({ model: model("assistant") })],
+      expectedRef: model("assistant"),
+      expectedEffort: "assistant",
+    },
+    {
+      name: "uses the session ref before the first assistant and no effort",
+      sessionModel: model("session"),
+      messages: [],
+      expectedRef: model("session"),
+      expectedEffort: undefined,
+    },
+  ];
+
+  it.each(modelSourceCases)("$name", ({ sessionModel, messages, expectedRef, expectedEffort }) => {
+    const refs: (ModelRef | undefined)[] = [];
+    const root = buildFleet(
+      fleetInput({
+        root: snapshot({ model: sessionModel, messages }),
+        modelLabel: (_location, ref) => {
+          refs.push(ref);
+          return { providerID: "anthropic", modelID: "claude", name: "claude" };
+        },
+      }),
+    ).root;
+
+    expect(refs).toStrictEqual([expectedRef]);
+    expect(root.effort).toBe(expectedEffort);
   });
 
   interface CardStatusCase {

@@ -1,3 +1,4 @@
+import type { JsonValue } from "@opencode/client/promise";
 import {
   Command,
   ComposerPill,
@@ -7,10 +8,12 @@ import {
   Style,
   type Context,
   type SessionRef,
+  usePanel,
 } from "@opencode/plugin/gui";
+import { createEffect, createSignal, onCleanup } from "solid-js";
 
 import { createFleetSource } from "./data/fleet-source";
-import type { PriceTable } from "./model/pricing";
+import { parsePriceTable, type PriceTable } from "./model/pricing";
 import { FleetPanel } from "./ui/fleet-panel";
 import { pillView } from "./ui/pill";
 import radar from "./ui/radar.css?inline";
@@ -22,8 +25,11 @@ const FLEET_TAB = { id: PANEL_ID, title: "Agent Fleet" } as const;
 async function fetchPrices(): Promise<PriceTable> {
   const response = await fetch("https://models.dev/api.json");
   if (!response.ok) throw new Error(`models.dev ${response.status}`);
-  // SAFETY: models.dev serves this shape; pricing reads optional fields defensively.
-  return (await response.json()) as PriceTable;
+  // The body is external JSON: decode its shape before use.
+  const payload: JsonValue = await response.json();
+  const table = parsePriceTable(payload);
+  if (table === undefined) throw new Error("models.dev returned an unexpected body");
+  return table;
 }
 
 function revealFleet(ctx: Context, session: SessionRef | undefined): void {
@@ -34,10 +40,12 @@ function revealFleet(ctx: Context, session: SessionRef | undefined): void {
 
 export default Plugin.define({
   setup(ctx) {
+    const [panelVisible, setPanelVisible] = createSignal(false);
     const source = createFleetSource({
       current: () => ctx.sessions.current(),
       openTab: (server, id) => ctx.tabs.open({ server, id }, { focus: true }),
       fetchPrices,
+      visible: panelVisible,
     });
     const openFleet = () => revealFleet(ctx, ctx.sessions.current());
 
@@ -57,17 +65,22 @@ export default Plugin.define({
       id: PANEL_ID,
       region: "side",
       list: (input) => (input.open.includes(PANEL_ID) ? [FLEET_TAB] : []),
-      render: () => (
-        <FleetPanel
-          fleet={source.fleet()}
-          lanes={source.lanes()}
-          beams={source.beams()}
-          now={source.now()}
-          onOpen={source.open}
-          canOpen={source.canOpen}
-          ui={ctx.ui}
-        />
-      ),
+      render: () => {
+        const panel = usePanel();
+        createEffect(() => setPanelVisible(panel.visible()));
+        onCleanup(() => setPanelVisible(false));
+        return (
+          <FleetPanel
+            fleet={source.fleet()}
+            lanes={source.lanes()}
+            beams={source.beams()}
+            now={source.now()}
+            onOpen={source.open}
+            canOpen={source.canOpen}
+            ui={ctx.ui}
+          />
+        );
+      },
     });
 
     ctx.add(Command, {

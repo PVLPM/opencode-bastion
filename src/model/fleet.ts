@@ -7,7 +7,7 @@ import type {
 
 import { deriveActivity, firstLine } from "./activity";
 import { delegations } from "./delegations";
-import { deriveStatus } from "./status";
+import { deriveStatus, latestAssistant } from "./status";
 import type { AgentView, FleetView, LineStats, ModelLabel, Money } from "./types";
 import { contextUsage, sessionInterval, tokenTotal } from "./usage";
 
@@ -80,14 +80,6 @@ export function sessionTitle(title: string | undefined): string | undefined {
   return title?.replace(SUBAGENT_SUFFIX, "");
 }
 
-function latestAssistantVariant(messages: readonly SessionMessageInfo[]): string | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message?.type === "assistant") return message.model.variant;
-  }
-  return undefined;
-}
-
 /** The orchestrator's task is the latest prompt, never the session title. */
 function latestUserTask(messages: readonly SessionMessageInfo[]): string | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -95,6 +87,11 @@ function latestUserTask(messages: readonly SessionMessageInfo[]): string | undef
     if (message?.type === "user") return firstLine(message.text);
   }
   return undefined;
+}
+
+/** The model actually serving the newest assistant turn, with its effort variant. */
+function latestAssistantModel(messages: readonly SessionMessageInfo[]): ModelRef | undefined {
+  return latestAssistant(messages)?.model;
 }
 
 function agentView(
@@ -111,12 +108,14 @@ function agentView(
     messages: snapshot.messages,
   });
   const interval = sessionInterval(snapshot.info, snapshot.running);
+  const assistantModel = latestAssistantModel(snapshot.messages);
+  const model = assistantModel ?? snapshot.info.model;
   return {
     sessionID: snapshot.info.id,
     agent: input.agentName(snapshot.info),
     title: sessionTitle(snapshot.info.title),
-    model: input.modelLabel(snapshot.info.location, snapshot.info.model),
-    effort: latestAssistantVariant(snapshot.messages) ?? snapshot.info.model?.variant,
+    model: input.modelLabel(snapshot.info.location, model),
+    effort: assistantModel?.variant,
     status: derived.status,
     statusDetail: derived.detail,
     activity: deriveActivity(snapshot.messages, derived.status, derived.detail),

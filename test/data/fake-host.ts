@@ -29,6 +29,7 @@ export interface FakeHostOptions {
   readonly routed?: string;
   readonly server?: string;
   readonly connected?: boolean;
+  readonly visible?: boolean;
   readonly sessions?: readonly FakeSession[];
   readonly childrenOnSync?: Readonly<Record<string, readonly SessionInfo[]>>;
   readonly messagesOnSync?: Readonly<Record<string, readonly SessionMessageInfo[]>>;
@@ -73,6 +74,7 @@ export function createFakeHost(options: FakeHostOptions = {}) {
   const seeds = options.sessions ?? [];
   const seedMessages = recordFrom(seeds, (seed) => seed.messages);
   const [connected, setConnectedSignal] = createSignal(options.connected ?? true);
+  const [visible, setVisibleSignal] = createSignal(options.visible ?? true);
   const [routedID, setRoutedID] = createSignal<string | undefined>(options.routed);
   const [serverID] = createSignal(options.server ?? "server");
   const [sessions, setSessions] = createSignal<Record<string, SessionInfo>>(
@@ -266,6 +268,7 @@ export function createFakeHost(options: FakeHostOptions = {}) {
 
   const host: FleetHost = {
     current,
+    visible,
     openTab: (server, id) => {
       openTabs.push({ server, id });
     },
@@ -280,6 +283,7 @@ export function createFakeHost(options: FakeHostOptions = {}) {
     data,
     setRouted: (sessionID: string | undefined) => setRoutedID(sessionID),
     setConnected: (value: boolean) => setConnectedSignal(value),
+    setVisible: (value: boolean) => setVisibleSignal(value),
     holdNextMessageSync: (sessionID: string) => {
       let release: () => void = () => undefined;
       const promise = new Promise<void>((resolve) => {

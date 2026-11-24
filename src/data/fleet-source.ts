@@ -14,7 +14,7 @@ import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from
 import { detectBeams, subagentCalls, type SubagentCall } from "../model/delegations";
 import { buildFleet, sessionTitle, type SessionSnapshot } from "../model/fleet";
 import { deriveLanes, type LaneSession } from "../model/lanes";
-import { resolveCost, type PriceTable } from "../model/pricing";
+import { canonicalPriceProvider, resolveCost, type PriceTable } from "../model/pricing";
 import type { AgentStatus, Beam, FleetView, LanesView, LineStats, Money } from "../model/types";
 import { tokenTotal } from "../model/usage";
 
@@ -61,6 +61,8 @@ export interface FleetHost {
   current(): FleetSession | undefined;
   openTab(server: string, id: string): void;
   fetchPrices(): Promise<PriceTable>;
+  /** The panel is on screen; the clock only runs while someone can see it. */
+  visible(): boolean;
 }
 
 export interface FleetSource {
@@ -147,13 +149,23 @@ function agentNameFor(data: FleetData, info: SessionInfo): string {
   return capitalize(agent?.name ?? info.agent ?? "unknown");
 }
 
-function latestSnapshotKey(messages: readonly SessionMessageInfo[]): number | undefined {
+interface LineRefresh {
+  readonly at: number;
+  /** False when the completed message explicitly reports no changed files. */
+  readonly request: boolean;
+}
+
+function latestLineRefresh(messages: readonly SessionMessageInfo[]): LineRefresh | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.type !== "assistant") continue;
-    if (message.time.completed === undefined) continue;
-    if ((message.snapshot?.files?.length ?? 0) === 0) continue;
-    return message.time.completed;
+    const completed = message.time.completed;
+    if (completed === undefined) continue;
+    if (!Number.isFinite(completed)) return undefined;
+    return {
+      at: completed,
+      request: message.snapshot?.files?.length !== 0,
+    };
   }
   return undefined;
 }
@@ -174,7 +186,13 @@ function priceFor(
   ref: ModelRef | undefined,
 ): Money | undefined {
   if (table === undefined || ref === undefined) return undefined;
-  return resolveCost(0, tokens, { providerID: ref.providerID, modelID: ref.id }, table);
+  return resolveCost(
+    0,
+    tokens,
+    { providerID: ref.providerID, modelID: ref.id },
+    table,
+    canonicalPriceProvider(ref.providerID),
+  );
 }
 
 export function createFleetSource(host: FleetHost): FleetSource {
@@ -412,15 +430,18 @@ export function createFleetSource(host: FleetHost): FleetSource {
     const scope = scopeKey(current);
     for (const info of [current.root, ...current.children]) {
       const key = `${scope}\n${info.id}`;
-      const snapshotKey = latestSnapshotKey(current.data.session.message.list(info.id));
-      if (snapshotKey === undefined) {
+      const refresh = latestLineRefresh(current.data.session.message.list(info.id));
+      if (refresh === undefined) {
         const hadKey = lineKeys.delete(key);
         lineRequests.delete(key);
         if (hadKey) setLine(key, undefined);
         continue;
       }
-      if (lineKeys.get(key) === snapshotKey) continue;
-      lineKeys.set(key, snapshotKey);
+      // An explicit empty file list describes this turn, not the session's
+      // cumulative diff; keep the last known stats until a later turn changes files.
+      if (!refresh.request) continue;
+      if (lineKeys.get(key) === refresh.at) continue;
+      lineKeys.set(key, refresh.at);
       lineRequestSequence += 1;
       const request = lineRequestSequence;
       lineRequests.set(key, request);
@@ -465,7 +486,8 @@ export function createFleetSource(host: FleetHost): FleetSource {
   });
 
   createEffect(() => {
-    if (!hasActiveMember()) return;
+    if (!host.visible() || !hasActiveMember()) return;
+    setNow(Date.now());
     const interval = setInterval(() => setNow(Date.now()), 1_000);
     onCleanup(() => clearInterval(interval));
   });

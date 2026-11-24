@@ -83,7 +83,10 @@ export interface FleetView {
  * event silence.
  */
 export interface LaneBlock {
-  /** Stable across updates: `${sessionID}:${id of the message that opened it}`. */
+  /**
+   * Stable across updates: `${sessionID}:${id of the prompt that opened it, else
+   * the first assistant}`.
+   */
   readonly id: string;
   readonly start: number;
   /** Absent while the execution is live; the renderer extends it to `now`. */

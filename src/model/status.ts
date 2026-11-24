@@ -29,7 +29,8 @@ interface TerminalEvidence {
   error: SessionStructuredError | undefined;
 }
 
-function latestAssistant(
+/** The newest assistant turn in the transcript. */
+export function latestAssistant(
   messages: readonly SessionMessageInfo[],
 ): SessionMessageAssistant | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
