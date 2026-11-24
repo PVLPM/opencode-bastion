@@ -678,7 +678,8 @@ function buildLanes(
         start: base + start * 1000,
         end: end === undefined ? undefined : base + end * 1000,
         status,
-        label,
+        label: label?.split("\n", 1)[0],
+        text: label,
       }),
     ),
   }));
@@ -790,7 +791,18 @@ const SESSION_LANES: readonly LaneSpec[] = [
       [-524, -505, "done", "Fixer: recovery fixed"],
       [-334, -300, "done", "Fixer: reconnect test stable"],
       [-152, -128, "done", "Deployer failed: rate limit"],
-      [-44, undefined, "running", "Also check the offline banner"],
+      [
+        -44,
+        undefined,
+        "running",
+        `Also check the offline banner.
+
+Reproduce the first launch without a network connection, then reconnect while the banner is still visible. Compare that with what happens when the connection drops halfway through a session.
+
+Check the copy at narrow panel widths and make sure the retry action remains visible at larger text sizes. Confirm that an empty session does not show the same message as a connection failure.
+
+Write up the difference between the two cases and include which one clears the banner automatically.`,
+      ],
     ],
   },
   {

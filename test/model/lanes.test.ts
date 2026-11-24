@@ -61,7 +61,14 @@ describe("deriveLanes execution blocks", () => {
     const view = deriveLanes(lanesInput({ root }));
 
     expect(view.lanes[0]?.blocks).toStrictEqual([
-      { id: "ses-root:a1", start: 20, end: 40, status: "done", label: "Do the work" },
+      {
+        id: "ses-root:a1",
+        start: 20,
+        end: 40,
+        status: "done",
+        label: "Do the work",
+        text: "Do the work",
+      },
     ]);
     expect(view.from).toBe(20);
   });
@@ -81,8 +88,15 @@ describe("deriveLanes execution blocks", () => {
     const blocks = deriveLanes(lanesInput({ root })).lanes[0]?.blocks;
 
     expect(blocks).toStrictEqual([
-      { id: "ses-root:a1", start: 20, end: 30, status: "done", label: "First" },
-      { id: "ses-root:a2", start: 110, end: 120, status: "failed", label: "Second task" },
+      { id: "ses-root:a1", start: 20, end: 30, status: "done", label: "First", text: "First" },
+      {
+        id: "ses-root:a2",
+        start: 110,
+        end: 120,
+        status: "failed",
+        label: "Second task",
+        text: "Second task\nrest",
+      },
     ]);
   });
 
@@ -99,6 +113,7 @@ describe("deriveLanes execution blocks", () => {
       end: undefined,
       status: "waiting",
       label: undefined,
+      text: undefined,
     });
   });
 
@@ -148,13 +163,21 @@ describe("deriveLanes execution blocks", () => {
     const blocks = deriveLanes(lanesInput({ root })).lanes[0]?.blocks;
 
     expect(blocks).toStrictEqual([
-      { id: "ses-root:old", start: 10, end: 20, status: "done", label: undefined },
+      {
+        id: "ses-root:old",
+        start: 10,
+        end: 20,
+        status: "done",
+        label: undefined,
+        text: undefined,
+      },
       {
         id: `ses-root:${prompt.id}`,
         start: 30,
         end: undefined,
         status,
         label: undefined,
+        text: undefined,
       },
     ]);
   });
@@ -171,7 +194,14 @@ describe("deriveLanes execution blocks", () => {
     const blocks = deriveLanes(lanesInput({ root })).lanes[0]?.blocks;
 
     expect(blocks).toStrictEqual([
-      { id: "ses-root:a1", start: 20, end: 40, status: "done", label: undefined },
+      {
+        id: "ses-root:a1",
+        start: 20,
+        end: 40,
+        status: "done",
+        label: undefined,
+        text: undefined,
+      },
     ]);
   });
 
@@ -195,6 +225,7 @@ describe("deriveLanes execution blocks", () => {
       end: expectedEnd,
       status: "unknown",
       label: undefined,
+      text: undefined,
     });
   });
 
@@ -210,7 +241,14 @@ describe("deriveLanes execution blocks", () => {
     const blocks = deriveLanes(lanesInput({ root })).lanes[0]?.blocks;
 
     expect(blocks).toStrictEqual([
-      { id: "ses-root:a1", start: 20, end: 30, status: "done", label: undefined },
+      {
+        id: "ses-root:a1",
+        start: 20,
+        end: 30,
+        status: "done",
+        label: undefined,
+        text: undefined,
+      },
     ]);
   });
 
@@ -227,6 +265,7 @@ interface LabelCase {
   readonly name: string;
   readonly messages: readonly SessionMessageInfo[];
   readonly label: string | undefined;
+  readonly text: string | undefined;
 }
 
 const labelCases: readonly LabelCase[] = [
@@ -234,6 +273,7 @@ const labelCases: readonly LabelCase[] = [
     name: "a user prompt contributes its first non-empty line",
     messages: [makeUser(10, "\n  Fix the tests  \nmore"), makeAssistant({ id: "a1", created: 20 })],
     label: "Fix the tests",
+    text: "Fix the tests  \nmore",
   },
   {
     name: "a synthetic prompt prefers its description",
@@ -242,6 +282,7 @@ const labelCases: readonly LabelCase[] = [
       makeAssistant({ id: "a1", created: 20 }),
     ],
     label: "Synthetic task",
+    text: "Synthetic task",
   },
   {
     name: "a synthetic prompt without a description uses its first line",
@@ -250,19 +291,23 @@ const labelCases: readonly LabelCase[] = [
       makeAssistant({ id: "a1", created: 20 }),
     ],
     label: "Synthetic text",
+    text: "Synthetic text  \nmore",
   },
   {
     name: "an assistant without a preceding prompt has no label",
     messages: [makeAssistant({ id: "a1", created: 20 })],
     label: undefined,
+    text: undefined,
   },
 ];
 
 describe("deriveLanes root block labels", () => {
-  it.each(labelCases)("$name", ({ messages, label }) => {
+  it.each(labelCases)("$name", ({ messages, label, text }) => {
     const root = laneSession({ messages });
+    const block = deriveLanes(lanesInput({ root })).lanes[0]?.blocks[0];
 
-    expect(deriveLanes(lanesInput({ root })).lanes[0]?.blocks[0]?.label).toBe(label);
+    expect(block?.label).toBe(label);
+    expect(block?.text).toBe(text);
   });
 });
 

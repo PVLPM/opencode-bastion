@@ -30,6 +30,7 @@ interface DraftBlock {
   end: number | undefined;
   status: AgentStatus;
   label: string | undefined;
+  text: string | undefined;
 }
 
 interface HandoffDraft {
@@ -44,20 +45,25 @@ interface ChildLane {
   readonly blocks: readonly DraftBlock[];
 }
 
+function nonEmpty(text: string | undefined): string | undefined {
+  const trimmed = text?.trim();
+  return trimmed === undefined || trimmed === "" ? undefined : trimmed;
+}
+
 function outcomeStatus(outcome: SessionMessageIdle["outcome"]): AgentStatus {
   if (outcome === "succeeded") return "done";
   if (outcome === "failed") return "failed";
   return "unknown";
 }
 
-/** The last prompt before a root block opened: a user message or a synthetic one. */
-function promptLabel(messages: readonly SessionMessageInfo[], index: number): string | undefined {
+/** The full prompt before a root block opened: a user message or a synthetic one. */
+function promptText(messages: readonly SessionMessageInfo[], index: number): string | undefined {
   for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
     const message = messages[cursor];
     if (message === undefined) continue;
-    if (message.type === "user") return firstLine(message.text);
+    if (message.type === "user") return nonEmpty(message.text);
     if (message.type === "synthetic") {
-      return firstLine(message.description) ?? firstLine(message.text);
+      return nonEmpty(message.description) ?? nonEmpty(message.text);
     }
   }
   return undefined;
@@ -81,7 +87,7 @@ function triggerMessage(messages: readonly SessionMessageInfo[]): SessionMessage
  */
 function deriveBlocks(
   session: LaneSession,
-  labelFor: ((index: number) => string | undefined) | undefined,
+  textFor: ((index: number) => string | undefined) | undefined,
 ): DraftBlock[] {
   const blocks: DraftBlock[] = [];
   let open: DraftBlock | undefined;
@@ -93,12 +99,14 @@ function deriveBlocks(
     if (message.type === "assistant") {
       if (!Number.isFinite(message.time.created)) continue;
       if (open === undefined) {
+        const text = textFor?.(index);
         open = {
           id: `${session.info.id}:${message.id}`,
           start: message.time.created,
           end: undefined,
           status: "unknown",
-          label: labelFor?.(index),
+          label: firstLine(text),
+          text,
         };
         blocks.push(open);
       }
@@ -123,6 +131,7 @@ function deriveBlocks(
         end: undefined,
         status: session.waiting ? "waiting" : "running",
         label: undefined,
+        text: undefined,
       };
       blocks.push(open);
     }
@@ -177,6 +186,7 @@ function placeHandoffs(
     if (block !== undefined && !labelledBlocks.has(block.id)) {
       labelledBlocks.add(block.id);
       block.label = draft.description;
+      block.text = draft.description;
     }
     handoffs.push({
       id: draft.id,
@@ -226,7 +236,7 @@ function laneView(
 }
 
 export function deriveLanes(input: LanesInput): LanesView {
-  const rootBlocks = deriveBlocks(input.root, (index) => promptLabel(input.root.messages, index));
+  const rootBlocks = deriveBlocks(input.root, (index) => promptText(input.root.messages, index));
   const childLanes = input.children.map((session) => ({
     session,
     blocks: deriveBlocks(session, undefined),

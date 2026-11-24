@@ -96,6 +96,8 @@ export interface LaneBlock {
   readonly status: AgentStatus;
   /** Delegated task (subagent) or prompt first line (orchestrator); absent when unknown. */
   readonly label: string | undefined;
+  /** The full prompt or task text behind `label`, trimmed; for tooltips. */
+  readonly text: string | undefined;
 }
 
 export interface Lane {

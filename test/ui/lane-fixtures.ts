@@ -23,6 +23,7 @@ export function lane(
       end: end === undefined ? undefined : at(end),
       status: status ?? (end === undefined ? "running" : "done"),
       label: `${agent} ${index}`,
+      text: `${agent} ${index}\nFull execution text`,
     })),
   };
 }
