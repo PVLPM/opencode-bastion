@@ -16,13 +16,12 @@ function testAgent(init: AgentInit): AgentView {
     statusDetail: undefined,
     activity: undefined,
     task: undefined,
-    prompt: undefined,
     startedAt: TEST_NOW - 10_000,
     endedAt: undefined,
     cost: undefined,
     context: undefined,
     lines: undefined,
-    error: undefined,
+    errorKind: undefined,
     current: false,
   };
   return { ...base, ...init };

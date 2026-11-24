@@ -23,11 +23,17 @@ function withSource(host: FleetHost, run: (source: FleetSource) => Promise<void>
   return run(mounted.source).finally(mounted.dispose);
 }
 
-function subagentCall(id: string, childID: string, description: string) {
+function subagentCall(
+  id: string,
+  childID: string,
+  description: string,
+  status: "running" | "completed" | "error" = "running",
+) {
   return makeTool({
     id,
     name: "subagent",
-    input: { agent: "designer", description, prompt: `${description} prompt` },
+    status,
+    input: { agent: "designer", description },
     metadata: { sessionID: childID },
   });
 }
@@ -85,6 +91,75 @@ describe("createFleetSource anchoring", () => {
       expect(source.beams()).toStrictEqual([]);
     });
   });
+
+  it("re-syncs a family after leaving and re-entering it", async () => {
+    const fake = createFakeHost({
+      routed: "ses-a",
+      sessions: [
+        { info: makeSession({ id: "ses-a" }) },
+        { info: makeSession({ id: "ses-a1", parentID: "ses-a" }) },
+        { info: makeSession({ id: "ses-b" }) },
+        { info: makeSession({ id: "ses-b1", parentID: "ses-b" }) },
+      ],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      const before = fake.calls.messageSyncs.filter((id) => id === "ses-a").length;
+
+      fake.setRouted("ses-b");
+      await flush();
+      fake.setRouted("ses-a");
+      await flush();
+
+      expect(source.fleet()?.root.sessionID).toBe("ses-a");
+      expect(fake.calls.messageSyncs.filter((id) => id === "ses-a").length).toBe(before + 1);
+      expect(fake.calls.messageSyncs.filter((id) => id === "ses-a1").length).toBeGreaterThan(0);
+    });
+  });
+});
+
+describe("createFleetSource cold sessions", () => {
+  it("keeps the fleet empty but still syncs the routed session and root before info loads", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }), loaded: false }],
+      sessionGate: gate,
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(source.fleet()).toBeUndefined();
+      expect(fake.calls.sessionSyncs.map((call) => call.id)).toStrictEqual([
+        "ses-root",
+        "ses-root",
+      ]);
+      expect(fake.calls.sessionSyncs.some((call) => call.children)).toBe(true);
+
+      release?.();
+      await flush();
+      await flush();
+      expect(source.fleet()?.root.sessionID).toBe("ses-root");
+    });
+  });
+
+  it("never shows or syncs a deleted root", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }), deleted: true }],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(source.fleet()).toBeUndefined();
+      expect(source.canOpen("ses-root")).toBe(false);
+      expect(fake.calls.sessionSyncs).toStrictEqual([]);
+    });
+  });
 });
 
 describe("createFleetSource syncing", () => {
@@ -133,10 +208,28 @@ describe("createFleetSource syncing", () => {
       expect(source.fleet()?.active.map((agent) => agent.sessionID)).toStrictEqual(["ses-child"]);
     });
   });
+
+  it("retries a failed sync on the next store change", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }) }],
+      failMessageSyncOnce: ["ses-root"],
+    });
+
+    await withSource(fake.host, async () => {
+      await flush();
+      expect(fake.calls.messageSyncs.filter((id) => id === "ses-root")).toHaveLength(1);
+
+      fake.addSession(makeSession({ id: "ses-child", parentID: "ses-root", created: 2 }));
+      await flush();
+
+      expect(fake.calls.messageSyncs.filter((id) => id === "ses-root").length).toBeGreaterThan(1);
+    });
+  });
 });
 
 describe("createFleetSource beams", () => {
-  it("emits no beam on load, one out on a new delegation and one in when the child idles", async () => {
+  it("beams only from live delegation transitions after hydration", async () => {
     const fake = createFakeHost({
       routed: "ses-root",
       sessions: [
@@ -161,11 +254,69 @@ describe("createFleetSource beams", () => {
       expect(outward).toHaveLength(1);
       expect(outward[0]?.sessionID).toBe("ses-child");
 
-      fake.setStatus("ses-child", "idle");
+      fake.addMessage(
+        "ses-root",
+        makeAssistant({ content: [subagentCall("tool-2", "ses-child", "Second", "completed")] }),
+      );
       await flush();
       const inward = source.beams().filter((beam) => beam.direction === "in");
       expect(inward).toHaveLength(1);
       expect(inward[0]?.sessionID).toBe("ses-child");
+    });
+  });
+
+  it("shows no beam while a cold transcript is still hydrating", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }) }],
+      messageGate: gate,
+      messagesOnSync: {
+        "ses-root": [makeAssistant({ content: [subagentCall("tool-1", "ses-child", "Historic")] })],
+      },
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(source.fleet()).toBeDefined();
+      expect(source.beams()).toStrictEqual([]);
+
+      release?.();
+      await flush();
+      await flush();
+      expect(source.beams()).toStrictEqual([]);
+    });
+  });
+
+  it("shows no beam when a stale running child merely becomes idle after a reconnect", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root" }),
+          messages: [makeAssistant({ content: [subagentCall("tool-1", "ses-child", "First")] })],
+        },
+        {
+          info: makeSession({ id: "ses-child", parentID: "ses-root" }),
+          status: "running",
+        },
+      ],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      fake.setConnected(false);
+      await flush();
+      fake.setConnected(true);
+      await flush();
+
+      fake.setStatus("ses-child", "idle");
+      await flush();
+
+      expect(source.beams()).toStrictEqual([]);
     });
   });
 });
@@ -177,6 +328,7 @@ describe("createFleetSource navigation", () => {
       sessions: [
         { info: makeSession({ id: "ses-root" }) },
         { info: makeSession({ id: "ses-child", parentID: "ses-root" }) },
+        { info: makeSession({ id: "ses-gone", parentID: "ses-root" }), deleted: true },
         { info: makeSession({ id: "ses-other" }) },
       ],
     });
@@ -185,6 +337,7 @@ describe("createFleetSource navigation", () => {
       await flush();
       expect(source.canOpen("ses-root")).toBe(true);
       expect(source.canOpen("ses-child")).toBe(true);
+      expect(source.canOpen("ses-gone")).toBe(false);
       expect(source.canOpen("ses-other")).toBe(false);
       expect(source.canOpen("ses-ghost")).toBe(false);
 
@@ -323,6 +476,36 @@ describe("createFleetSource prices", () => {
       await flush();
       expect(fake.calls.priceFetches()).toBe(0);
       expect(source.fleet()?.root.cost).toStrictEqual({ usd: 0.5, estimated: false });
+    });
+  });
+
+  it("adds only the grandchild's estimate to the reported family total", async () => {
+    const table = {
+      p: { models: { m: { cost: { input: 50, output: 0 } } } },
+    } satisfies PriceTable;
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        { info: makeSession({ id: "ses-root", cost: 0.4 }) },
+        { info: makeSession({ id: "ses-child", parentID: "ses-root", cost: 0.3, created: 2 }) },
+        {
+          info: makeSession({
+            id: "ses-grandchild",
+            parentID: "ses-child",
+            created: 3,
+            tokens: makeTokens({ input: 1_000 }),
+            model: { id: "m", providerID: "p" },
+          }),
+        },
+      ],
+      prices: () => Promise.resolve(table),
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      await flush();
+      expect(source.fleet()?.totalCost).toStrictEqual({ usd: 0.75, estimated: true });
+      expect(source.fleet()?.active).toStrictEqual([]);
     });
   });
 });

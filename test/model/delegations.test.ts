@@ -1,18 +1,25 @@
 import { describe, expect, it } from "vitest";
 
-import { delegations, detectBeams, type BeamSnapshot } from "../../src/model/delegations";
+import {
+  delegations,
+  detectBeams,
+  subagentCalls,
+  type SubagentCall,
+} from "../../src/model/delegations";
 import type { Beam } from "../../src/model/types";
-import { makeAssistant, makeError, makeTool } from "../fixtures";
+import { makeAssistant, makeTool } from "../fixtures";
 
-function subagentTool(id: string, childID: string, description: string) {
-  return makeTool({
-    id,
-    name: "subagent",
-    input: { agent: "designer", description, prompt: `${description} prompt` },
-    metadata: { sessionID: childID },
-  });
+function subagentTool(
+  id: string,
+  childID: string,
+  description: string,
+  status: "streaming" | "running" | "completed" | "error" = "running",
+) {
+  const values = { id, name: "subagent", status, input: { agent: "designer", description } };
+  return status === "streaming"
+    ? makeTool({ ...values, text: "{}" })
+    : makeTool({ ...values, metadata: { sessionID: childID } });
 }
-
 describe("delegations", () => {
   it("maps a subagent call to its child session", () => {
     const found = delegations([
@@ -23,8 +30,6 @@ describe("delegations", () => {
       toolID: "tool-1",
       agent: "designer",
       description: "Design the panel",
-      prompt: "Design the panel prompt",
-      done: false,
     });
   });
 
@@ -35,13 +40,7 @@ describe("delegations", () => {
     ]);
 
     expect([...found.values()]).toStrictEqual([
-      {
-        toolID: "tool-2",
-        agent: "designer",
-        description: "Second",
-        prompt: "Second prompt",
-        done: false,
-      },
+      { toolID: "tool-2", agent: "designer", description: "Second" },
     ]);
   });
 
@@ -53,43 +52,6 @@ describe("delegations", () => {
     ]);
 
     expect([...found.keys()]).toStrictEqual(["ses-a", "ses-b"]);
-  });
-
-  it("marks a completed call done", () => {
-    const found = delegations([
-      makeAssistant({
-        content: [
-          makeTool({
-            id: "tool-1",
-            name: "subagent",
-            status: "completed",
-            input: { agent: "designer" },
-            metadata: { sessionID: "ses-child" },
-          }),
-        ],
-      }),
-    ]);
-
-    expect(found.get("ses-child")?.done).toBe(true);
-  });
-
-  it("marks a failed call done", () => {
-    const found = delegations([
-      makeAssistant({
-        content: [
-          makeTool({
-            id: "tool-1",
-            name: "subagent",
-            status: "error",
-            input: { agent: "designer" },
-            error: makeError("failed"),
-            metadata: { sessionID: "ses-child" },
-          }),
-        ],
-      }),
-    ]);
-
-    expect(found.get("ses-child")?.done).toBe(true);
   });
 
   it("ignores non-subagent tools", () => {
@@ -113,76 +75,140 @@ describe("delegations", () => {
   });
 });
 
-function snapshot(
-  toolIDs: readonly string[],
-  running: readonly string[],
-  targets: readonly (readonly [string, string])[],
-): BeamSnapshot {
-  return {
-    toolIDs: new Set(toolIDs),
-    running: new Set(running),
-    delegationTargets: new Map(targets),
-  };
+const noCalls: ReadonlyMap<string, SubagentCall> = new Map();
+
+function call(
+  toolID: string,
+  childID: string | undefined,
+  status: SubagentCall["status"],
+): SubagentCall {
+  return { toolID, childID, status };
+}
+
+function calls(...entries: readonly SubagentCall[]): ReadonlyMap<string, SubagentCall> {
+  return new Map(entries.map((entry) => [entry.toolID, entry]));
 }
 
 function ids(beams: readonly Beam[]): readonly string[] {
   return beams.map((beam) => beam.id);
 }
 
-describe("detectBeams", () => {
-  it("does not animate the initial snapshot", () => {
-    const next = snapshot(["tool-1"], ["ses-child"], [["tool-1", "ses-child"]]);
+describe("subagentCalls", () => {
+  it("maps each delegation tool part by tool id", () => {
+    const found = subagentCalls([
+      makeAssistant({
+        content: [subagentTool("tool-1", "ses-child", "Design", "running")],
+      }),
+    ]);
 
-    expect(detectBeams(undefined, next)).toStrictEqual([]);
+    expect(found.get("tool-1")).toStrictEqual(call("tool-1", "ses-child", "running"));
   });
 
-  it("fires one outward beam per new delegation call", () => {
-    const prev = snapshot(["tool-1"], ["ses-child"], [["tool-1", "ses-child"]]);
-    const next = snapshot(
-      ["tool-1", "tool-2", "tool-3"],
-      ["ses-child"],
-      [
-        ["tool-1", "ses-child"],
-        ["tool-2", "ses-child"],
-        ["tool-3", "ses-child"],
-      ],
-    );
+  it("keeps a streaming call without a child id", () => {
+    const found = subagentCalls([
+      makeAssistant({
+        content: [subagentTool("tool-1", "ses-child", "Design", "streaming")],
+      }),
+    ]);
 
-    expect(detectBeams(prev, next)).toStrictEqual([
+    expect(found.get("tool-1")).toStrictEqual(call("tool-1", undefined, "streaming"));
+  });
+
+  it("keeps the latest state for a tool id", () => {
+    const found = subagentCalls([
+      makeAssistant({ content: [subagentTool("tool-1", "ses-child", "Design", "running")] }),
+      makeAssistant({ content: [subagentTool("tool-1", "ses-child", "Design", "completed")] }),
+    ]);
+
+    expect(found.get("tool-1")).toStrictEqual(call("tool-1", "ses-child", "completed"));
+  });
+
+  it("ignores non-subagent parts", () => {
+    const found = subagentCalls([
+      makeAssistant({ content: [makeTool({ id: "tool-1", name: "read" })] }),
+    ]);
+
+    expect(found.size).toBe(0);
+  });
+});
+
+describe("detectBeams", () => {
+  it("does not animate the hydration snapshot", () => {
+    const baseline = calls(call("tool-1", "ses-child", "running"));
+
+    expect(detectBeams(baseline, baseline, baseline)).toStrictEqual([]);
+  });
+
+  it("fires one outward beam for a new delegation entering running", () => {
+    const next = calls(call("tool-2", "ses-child", "running"));
+
+    expect(detectBeams(noCalls, noCalls, next)).toStrictEqual([
       { id: "out:ses-child:tool-2", sessionID: "ses-child", direction: "out" },
-      { id: "out:ses-child:tool-3", sessionID: "ses-child", direction: "out" },
     ]);
   });
 
-  it("skips a new tool with no known child", () => {
-    const prev = snapshot([], [], []);
-    const next = snapshot(["tool-1"], [], []);
+  it("fires outward only for calls absent at hydration", () => {
+    const baseline = calls(call("tool-1", "ses-child", "running"));
+    const next = calls(call("tool-1", "ses-child", "running"), call("tool-2", "ses-a", "running"));
 
-    expect(detectBeams(prev, next)).toStrictEqual([]);
+    expect(detectBeams(baseline, baseline, next)).toStrictEqual([
+      { id: "out:ses-a:tool-2", sessionID: "ses-a", direction: "out" },
+    ]);
   });
 
-  it("fires an inward beam when a child stops running", () => {
-    const prev = snapshot(["tool-1"], ["ses-a", "ses-b"], [["tool-1", "ses-a"]]);
-    const next = snapshot(["tool-1"], ["ses-a"], [["tool-1", "ses-a"]]);
-    const beams = detectBeams(prev, next);
+  it("fires outward when a running call resolves its child id later", () => {
+    const before = calls(call("tool-1", undefined, "running"));
+    const next = calls(call("tool-1", "ses-child", "running"));
+
+    expect(detectBeams(noCalls, before, next)).toStrictEqual([
+      { id: "out:ses-child:tool-1", sessionID: "ses-child", direction: "out" },
+    ]);
+  });
+
+  it("fires one inward beam when an observed running call completes", () => {
+    const before = calls(call("tool-1", "ses-child", "running"));
+    const next = calls(call("tool-1", "ses-child", "completed"));
+    const beams = detectBeams(noCalls, before, next);
 
     expect(beams).toHaveLength(1);
     expect(beams[0]?.direction).toBe("in");
-    expect(beams[0]?.sessionID).toBe("ses-b");
-    expect(beams[0]?.id).toMatch(/^in:ses-b:/u);
+    expect(beams[0]?.sessionID).toBe("ses-child");
+    expect(beams[0]?.id).toMatch(/^in:ses-child:/u);
   });
 
-  it("gives every inward beam a distinct id", () => {
-    const prev = snapshot([], ["ses-a", "ses-b"], []);
-    const next = snapshot([], [], []);
-    const beams = detectBeams(prev, next);
+  it("fires one inward beam when an observed streaming call completes", () => {
+    const before = calls(call("tool-1", undefined, "streaming"));
+    const next = calls(call("tool-1", "ses-child", "completed"));
+    const beams = detectBeams(noCalls, before, next);
 
-    expect(new Set(ids(beams)).size).toBe(2);
+    expect(beams).toHaveLength(1);
+    expect(beams[0]?.direction).toBe("in");
+  });
+
+  it("fires no inward beam for a call already terminal at hydration", () => {
+    const baseline = calls(call("tool-1", "ses-child", "completed"));
+
+    expect(detectBeams(baseline, baseline, baseline)).toStrictEqual([]);
+  });
+
+  it("fires no beam for a new call first seen completed", () => {
+    const next = calls(call("tool-1", "ses-child", "completed"));
+
+    expect(detectBeams(noCalls, noCalls, next)).toStrictEqual([]);
   });
 
   it("fires nothing when nothing changed", () => {
-    const prev = snapshot(["tool-1"], ["ses-a"], [["tool-1", "ses-a"]]);
+    const before = calls(call("tool-1", "ses-child", "running"));
 
-    expect(detectBeams(prev, prev)).toStrictEqual([]);
+    expect(detectBeams(noCalls, before, before)).toStrictEqual([]);
+  });
+
+  it("gives every inward beam a distinct id", () => {
+    const before = calls(call("tool-1", "ses-a", "running"), call("tool-2", "ses-b", "running"));
+    const next = calls(call("tool-1", "ses-a", "completed"), call("tool-2", "ses-b", "completed"));
+    const beams = detectBeams(noCalls, before, next);
+
+    expect(beams).toHaveLength(2);
+    expect(new Set(ids(beams)).size).toBe(2);
   });
 });

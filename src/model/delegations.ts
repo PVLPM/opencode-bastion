@@ -1,4 +1,4 @@
-import type { SessionMessageInfo } from "@opencode/client/promise";
+import type { SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise";
 
 import { jsonText } from "./activity";
 import type { Beam } from "./types";
@@ -7,8 +7,6 @@ export interface Delegation {
   toolID: string;
   agent: string;
   description: string | undefined;
-  prompt: string | undefined;
-  done: boolean;
 }
 
 export function delegations(rootMessages: readonly SessionMessageInfo[]): Map<string, Delegation> {
@@ -24,36 +22,70 @@ export function delegations(rootMessages: readonly SessionMessageInfo[]): Map<st
         toolID: part.id,
         agent: jsonText(part.state.input.agent) ?? "subagent",
         description: jsonText(part.state.input.description),
-        prompt: jsonText(part.state.input.prompt),
-        done: part.state.status === "completed" || part.state.status === "error",
       });
     }
   }
   return found;
 }
 
-export interface BeamSnapshot {
-  readonly toolIDs: ReadonlySet<string>;
-  readonly running: ReadonlySet<string>;
-  readonly delegationTargets: ReadonlyMap<string, string>;
+export interface SubagentCall {
+  readonly toolID: string;
+  readonly childID: string | undefined;
+  readonly status: SessionMessageAssistantTool["state"]["status"];
 }
 
-let idleBeamSequence = 0;
-
-export function detectBeams(prev: BeamSnapshot | undefined, next: BeamSnapshot): Beam[] {
-  if (prev === undefined) return [];
-
-  const beams: Beam[] = [];
-  for (const toolID of next.toolIDs) {
-    if (prev.toolIDs.has(toolID)) continue;
-    const sessionID = next.delegationTargets.get(toolID);
-    if (sessionID === undefined) continue;
-    beams.push({ id: `out:${sessionID}:${toolID}`, sessionID, direction: "out" });
+/** Every subagent tool part of the root transcript, keyed by tool id, latest state wins. */
+export function subagentCalls(
+  rootMessages: readonly SessionMessageInfo[],
+): Map<string, SubagentCall> {
+  const found = new Map<string, SubagentCall>();
+  for (const message of rootMessages) {
+    if (message.type !== "assistant") continue;
+    for (const part of message.content) {
+      if (part.type !== "tool" || part.name !== "subagent") continue;
+      const childID =
+        part.state.status === "streaming" ? undefined : jsonText(part.state.metadata?.sessionID);
+      found.set(part.id, { toolID: part.id, childID, status: part.state.status });
+    }
   }
-  for (const sessionID of prev.running) {
-    if (next.running.has(sessionID)) continue;
-    idleBeamSequence += 1;
-    beams.push({ id: `in:${sessionID}:${idleBeamSequence}`, sessionID, direction: "in" });
+  return found;
+}
+
+let inBeamSequence = 0;
+
+/**
+ * Beams are observed tool-part transitions after hydration, never a child's
+ * status: out when a new delegation enters running, in when an observed call
+ * settles. `baseline` holds the parts present when the transcript was hydrated.
+ */
+export function detectBeams(
+  baseline: ReadonlyMap<string, SubagentCall>,
+  previous: ReadonlyMap<string, SubagentCall>,
+  next: ReadonlyMap<string, SubagentCall>,
+): Beam[] {
+  const beams: Beam[] = [];
+  for (const [toolID, call] of next) {
+    if (call.childID === undefined) continue;
+    const before = previous.get(toolID);
+    const fresh =
+      before === undefined || before.status !== "running" || before.childID === undefined;
+    if (call.status === "running" && call.childID !== undefined && !baseline.has(toolID) && fresh) {
+      beams.push({
+        id: `out:${call.childID}:${toolID}`,
+        sessionID: call.childID,
+        direction: "out",
+      });
+    }
+    const observed =
+      before !== undefined && (before.status === "running" || before.status === "streaming");
+    if (observed && (call.status === "completed" || call.status === "error")) {
+      inBeamSequence += 1;
+      beams.push({
+        id: `in:${call.childID}:${inBeamSequence}`,
+        sessionID: call.childID,
+        direction: "in",
+      });
+    }
   }
   return beams;
 }

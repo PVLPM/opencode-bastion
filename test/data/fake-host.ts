@@ -18,6 +18,10 @@ interface FakeSession {
   readonly permissions?: readonly PermissionRequest[];
   readonly forms?: readonly FormInfo[];
   readonly status?: "idle" | "running";
+  /** False models a session the store knows about but has not loaded yet. */
+  readonly loaded?: boolean;
+  /** True models a deleted session: `missing` is true, `get` stays undefined. */
+  readonly deleted?: boolean;
 }
 
 export interface FakeHostOptions {
@@ -26,10 +30,15 @@ export interface FakeHostOptions {
   readonly connected?: boolean;
   readonly sessions?: readonly FakeSession[];
   readonly childrenOnSync?: Readonly<Record<string, readonly SessionInfo[]>>;
+  readonly messagesOnSync?: Readonly<Record<string, readonly SessionMessageInfo[]>>;
   readonly agents?: AgentInfo[];
   readonly models?: ModelInfo[];
   readonly diff?: (sessionID: string) => Promise<FileDiffInfo[]>;
   readonly prices?: () => Promise<PriceTable>;
+  readonly sessionGate?: Promise<void>;
+  readonly messageGate?: Promise<void>;
+  readonly failSessionSyncOnce?: readonly string[];
+  readonly failMessageSyncOnce?: readonly string[];
 }
 
 function recordFrom<Value>(
@@ -44,38 +53,36 @@ function recordFrom<Value>(
   return Object.fromEntries(entries);
 }
 
-function rootOf(sessions: Record<string, SessionInfo>, sessionID: string): string {
-  let current = sessionID;
-  const seen = new Set<string>([sessionID]);
-  let parentID = sessions[sessionID]?.parentID;
-  while (parentID !== undefined && !seen.has(parentID)) {
-    current = parentID;
-    seen.add(parentID);
-    parentID = sessions[parentID]?.parentID;
+function afterGate(gate: Promise<void> | undefined, apply: () => void): Promise<void> {
+  if (gate === undefined) {
+    apply();
+    return Promise.resolve();
   }
-  return current;
-}
-
-function familyCost(sessions: Record<string, SessionInfo>, sessionID: string): number {
-  const rootID = rootOf(sessions, sessionID);
-  let total = 0;
-  for (const info of Object.values(sessions)) {
-    if (rootOf(sessions, info.id) === rootID) total += info.cost;
-  }
-  return total;
+  return gate.then(apply);
 }
 
 export function createFakeHost(options: FakeHostOptions = {}) {
   const seeds = options.sessions ?? [];
+  const seedMessages = recordFrom(seeds, (seed) => seed.messages);
   const [connected, setConnectedSignal] = createSignal(options.connected ?? true);
   const [routedID, setRoutedID] = createSignal<string | undefined>(options.routed);
   const [serverID] = createSignal(options.server ?? "server");
   const [sessions, setSessions] = createSignal<Record<string, SessionInfo>>(
     Object.fromEntries(seeds.map((seed) => [seed.info.id, seed.info])),
   );
-  const [messages, setMessages] = createSignal<Record<string, SessionMessageInfo[]>>(
-    recordFrom(seeds, (seed) => seed.messages),
+  const [loaded, setLoaded] = createSignal<Record<string, true>>(
+    Object.fromEntries(
+      seeds
+        .filter((seed) => seed.loaded !== false && seed.deleted !== true)
+        .map((seed) => [seed.info.id, true as const]),
+    ),
   );
+  const [deleted, setDeleted] = createSignal<Record<string, true>>(
+    Object.fromEntries(
+      seeds.filter((seed) => seed.deleted === true).map((seed) => [seed.info.id, true as const]),
+    ),
+  );
+  const [messages, setMessages] = createSignal<Record<string, SessionMessageInfo[]>>(seedMessages);
   const [permissions, setPermissions] = createSignal<Record<string, PermissionRequest[]>>(
     recordFrom(seeds, (seed) => seed.permissions),
   );
@@ -90,6 +97,9 @@ export function createFakeHost(options: FakeHostOptions = {}) {
   const [agents, setAgentsSignal] = createSignal<AgentInfo[]>(options.agents ?? []);
   const [models, setModelsSignal] = createSignal<ModelInfo[]>(options.models ?? []);
 
+  const failSessionSyncs = new Set(options.failSessionSyncOnce ?? []);
+  const failMessageSyncs = new Set(options.failMessageSyncOnce ?? []);
+
   const sessionSyncs: { id: string; children: boolean }[] = [];
   const messageSyncs: string[] = [];
   const permissionSyncs: string[] = [];
@@ -100,45 +110,93 @@ export function createFakeHost(options: FakeHostOptions = {}) {
   const openTabs: { server: string; id: string }[] = [];
   let priceFetches = 0;
 
+  const isLoaded = (sessionID: string): boolean =>
+    loaded()[sessionID] === true && deleted()[sessionID] !== true;
+
+  function load(sessionID: string): void {
+    if (deleted()[sessionID] === true) return;
+    setLoaded((current) =>
+      current[sessionID] === true ? current : { ...current, [sessionID]: true },
+    );
+  }
+
+  function remember(info: SessionInfo): void {
+    setSessions((current) => ({ ...current, [info.id]: info }));
+  }
+
+  function rootOf(sessionID: string): string {
+    let current = sessionID;
+    const seen = new Set<string>([sessionID]);
+    let parentID = isLoaded(sessionID) ? sessions()[sessionID]?.parentID : undefined;
+    while (parentID !== undefined && !seen.has(parentID)) {
+      current = parentID;
+      seen.add(parentID);
+      parentID = isLoaded(parentID) ? sessions()[parentID]?.parentID : undefined;
+    }
+    return current;
+  }
+
+  function knownSessions(): SessionInfo[] {
+    return Object.values(sessions()).filter((info) => isLoaded(info.id));
+  }
+
+  function familyCost(sessionID: string): number {
+    const rootID = rootOf(sessionID);
+    let total = 0;
+    for (const info of knownSessions()) {
+      if (rootOf(info.id) === rootID) total += info.cost;
+    }
+    return total;
+  }
+
   const data: FleetData = {
     session: {
-      list: () => Object.values(sessions()),
-      get: (sessionID) => {
-        const info = sessions()[sessionID];
-        if (info === undefined) throw new Error(`Unknown session: ${sessionID}`);
-        return info;
-      },
-      missing: (sessionID) => sessions()[sessionID] === undefined,
-      root: (sessionID) => rootOf(sessions(), sessionID),
+      list: () => knownSessions(),
+      get: (sessionID) => (isLoaded(sessionID) ? sessions()[sessionID] : undefined),
+      missing: (sessionID) => deleted()[sessionID] === true,
+      root: (sessionID) => rootOf(sessionID),
       status: (sessionID) => statuses()[sessionID] ?? "idle",
-      cost: (sessionID) => familyCost(sessions(), sessionID),
+      cost: (sessionID) => familyCost(sessionID),
       sync: (sessionID, syncOptions) => {
         sessionSyncs.push({ id: sessionID, children: syncOptions?.children === true });
-        const additions = options.childrenOnSync?.[sessionID];
-        if (syncOptions?.children === true && additions !== undefined) {
-          setSessions((current) => ({
-            ...current,
-            ...Object.fromEntries(additions.map((info) => [info.id, info])),
-          }));
+        if (failSessionSyncs.delete(sessionID)) {
+          return Promise.reject(new Error(`Failed to sync ${sessionID}`));
         }
-        return Promise.resolve();
+        return afterGate(options.sessionGate, () => {
+          if (syncOptions?.children === true) {
+            for (const info of options.childrenOnSync?.[sessionID] ?? []) {
+              remember(info);
+              load(info.id);
+            }
+          }
+          load(sessionID);
+        });
       },
       message: {
-        list: (sessionID) => messages()[sessionID] ?? [],
+        list: (sessionID) => (isLoaded(sessionID) ? (messages()[sessionID] ?? []) : []),
         sync: (sessionID) => {
           messageSyncs.push(sessionID);
-          return Promise.resolve();
+          if (failMessageSyncs.delete(sessionID)) {
+            return Promise.reject(new Error(`Failed to sync messages for ${sessionID}`));
+          }
+          return afterGate(options.messageGate, () => {
+            const onSync = options.messagesOnSync?.[sessionID];
+            if (onSync !== undefined) {
+              setMessages((current) => ({ ...current, [sessionID]: [...onSync] }));
+            }
+            load(sessionID);
+          });
         },
       },
       permission: {
-        list: (sessionID) => permissions()[sessionID] ?? [],
+        list: (sessionID) => (isLoaded(sessionID) ? (permissions()[sessionID] ?? []) : []),
         sync: (sessionID) => {
           permissionSyncs.push(sessionID);
           return Promise.resolve();
         },
       },
       form: {
-        list: (sessionID) => forms()[sessionID] ?? [],
+        list: (sessionID) => (isLoaded(sessionID) ? forms()[sessionID] : undefined),
         sync: (sessionID) => {
           formSyncs.push(sessionID);
           return Promise.resolve();
@@ -204,8 +262,24 @@ export function createFakeHost(options: FakeHostOptions = {}) {
     data,
     setRouted: (sessionID: string | undefined) => setRoutedID(sessionID),
     setConnected: (value: boolean) => setConnectedSignal(value),
-    addSession: (info: SessionInfo) =>
-      setSessions((currentSessions) => ({ ...currentSessions, [info.id]: info })),
+    addSession: (info: SessionInfo) => {
+      remember(info);
+      load(info.id);
+    },
+    unload: (sessionID: string) =>
+      setLoaded((currentLoaded) => {
+        const next = { ...currentLoaded };
+        delete next[sessionID];
+        return next;
+      }),
+    deleteSession: (sessionID: string) => {
+      setDeleted((currentDeleted) => ({ ...currentDeleted, [sessionID]: true }));
+      setLoaded((currentLoaded) => {
+        const next = { ...currentLoaded };
+        delete next[sessionID];
+        return next;
+      });
+    },
     addMessage: (sessionID: string, message: SessionMessageInfo) =>
       setMessages((currentMessages) => ({
         ...currentMessages,

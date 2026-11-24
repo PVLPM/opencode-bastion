@@ -10,6 +10,7 @@ import type {
   SessionMessageIdle,
   SessionMessageToolStateCompleted,
   SessionMessageToolStateError,
+  SessionMessageUser,
   SessionStructuredError,
   TokenUsageInfo,
 } from "@opencode/client/promise";
@@ -68,6 +69,7 @@ export interface AssistantValues {
   created?: number;
   completed?: number;
   content?: SessionMessageAssistant["content"];
+  model?: ModelRef;
   tokens?: TokenUsageInfo;
   error?: SessionStructuredError;
   retry?: SessionMessageAssistant["retry"];
@@ -81,7 +83,7 @@ export function makeAssistant(values: AssistantValues = {}): SessionMessageAssis
     time,
     type: "assistant",
     agent: "orchestrator",
-    model: { id: "claude", providerID: "anthropic" },
+    model: values.model ?? { id: "claude", providerID: "anthropic" },
     content: values.content ?? [],
   };
   if (values.tokens !== undefined) message.tokens = values.tokens;
@@ -181,6 +183,16 @@ export function makeCompactionCompleted(
   return message;
 }
 
-export function makeError(message: string): SessionStructuredError {
-  return { type: "error", message };
+export function makeUser(created = 0, text = "Do the work"): SessionMessageUser {
+  return { id: `msg-user-${created}`, time: { created }, type: "user", text };
+}
+
+export function makeError(
+  message: string,
+  type = "error",
+  status?: number,
+): SessionStructuredError {
+  const error: SessionStructuredError = { type, message };
+  if (status !== undefined) error.status = status;
+  return error;
 }

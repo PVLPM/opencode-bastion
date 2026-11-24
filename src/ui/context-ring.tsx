@@ -1,7 +1,7 @@
 import { Show } from "solid-js";
 
 import type { ContextUsage } from "../model/types";
-import { formatTokens } from "./format";
+import { formatTokens } from "../model/format";
 
 const SIZE = 15;
 const STROKE = 2;

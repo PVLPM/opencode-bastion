@@ -4,7 +4,7 @@ import type { AgentView, Beam, FleetView } from "../model/types";
 import type { Ui } from "@opencode/plugin/gui";
 import { AgentCard } from "./agent-card";
 import { Connections } from "./connections";
-import { formatMoney } from "./format";
+import { formatMoney } from "../model/format";
 import { reduceMotion } from "./motion";
 import { Timeline } from "./timeline";
 
@@ -143,7 +143,12 @@ export function FleetPanel(props: FleetPanelProps) {
                   <span class="bn-sep" aria-hidden="true">
                     ·
                   </span>
-                  <span class="bn-head__cost">{formatMoney(cost())}</span>
+                  <span
+                    class="bn-head__cost"
+                    title="Reported plus estimated cost for this session's family"
+                  >
+                    {formatMoney(cost())}
+                  </span>
                 </>
               )}
             </Show>

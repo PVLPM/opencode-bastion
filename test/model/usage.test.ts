@@ -5,7 +5,6 @@ import {
   makeAssistant,
   makeCompactionCompleted,
   makeCompactionRunning,
-  makeIdle,
   makeSession,
   makeTokens,
 } from "../fixtures";
@@ -15,21 +14,23 @@ const used = makeTokens({ input: 10, output: 20, reasoning: 5, cacheRead: 3, cac
 interface UsageCase {
   readonly name: string;
   readonly messages: Parameters<typeof contextUsage>[0];
-  readonly limit: number | undefined;
+  readonly limit: (ref: { id: string; providerID: string }) => number | undefined;
   readonly expected: ReturnType<typeof contextUsage>;
 }
+
+const constant = (limit: number | undefined) => (_ref: { id: string; providerID: string }) => limit;
 
 const usageCases: readonly UsageCase[] = [
   {
     name: "sums every token kind of the latest assistant",
     messages: [makeAssistant({ tokens: used })],
-    limit: 200,
+    limit: constant(200),
     expected: { used: 40, limit: 200 },
   },
   {
     name: "skips assistants without tokens",
     messages: [makeAssistant({ created: 1, tokens: used }), makeAssistant({ created: 2 })],
-    limit: 200,
+    limit: constant(200),
     expected: { used: 40, limit: 200 },
   },
   {
@@ -38,13 +39,13 @@ const usageCases: readonly UsageCase[] = [
       makeAssistant({ created: 1, tokens: used }),
       makeCompactionCompleted({ created: 2 }),
     ],
-    limit: 200,
+    limit: constant(200),
     expected: undefined,
   },
   {
     name: "a running compaction is not a reset",
     messages: [makeAssistant({ created: 1, tokens: used }), makeCompactionRunning(2)],
-    limit: 200,
+    limit: constant(200),
     expected: { used: 40, limit: 200 },
   },
   {
@@ -53,26 +54,47 @@ const usageCases: readonly UsageCase[] = [
       makeCompactionCompleted({ created: 1 }),
       makeAssistant({ created: 2, tokens: used }),
     ],
-    limit: 200,
+    limit: constant(200),
     expected: { used: 40, limit: 200 },
   },
   {
     name: "a zero limit is unknown, never a percentage",
     messages: [makeAssistant({ tokens: used })],
-    limit: 0,
+    limit: constant(0),
     expected: undefined,
   },
   {
     name: "a missing limit is unknown",
     messages: [makeAssistant({ tokens: used })],
-    limit: undefined,
+    limit: constant(undefined),
+    expected: undefined,
+  },
+  {
+    name: "a non-finite limit is unknown",
+    messages: [makeAssistant({ tokens: used })],
+    limit: constant(Number.POSITIVE_INFINITY),
+    expected: undefined,
+  },
+  {
+    name: "a non-finite token total is unknown",
+    messages: [makeAssistant({ tokens: makeTokens({ input: Number.NaN }) })],
+    limit: constant(200),
     expected: undefined,
   },
   {
     name: "no assistant tokens is unknown",
     messages: [],
-    limit: 200,
+    limit: constant(200),
     expected: undefined,
+  },
+  {
+    name: "limits the token-bearing assistant by its own model",
+    messages: [
+      makeAssistant({ created: 1, tokens: used, model: { id: "claude", providerID: "anthropic" } }),
+      makeAssistant({ created: 2, model: { id: "gpt", providerID: "openai" } }),
+    ],
+    limit: (ref) => (ref.id === "claude" ? 100 : 200),
+    expected: { used: 40, limit: 100 },
   },
 ];
 
@@ -86,7 +108,7 @@ interface IntervalCase {
   readonly name: string;
   readonly info: ReturnType<typeof makeSession>;
   readonly running: boolean;
-  readonly messages: Parameters<typeof sessionInterval>[2];
+  readonly startedAt: number | undefined;
   readonly endedAt: number | undefined;
 }
 
@@ -95,44 +117,41 @@ const intervalCases: readonly IntervalCase[] = [
     name: "a running session has no end",
     info: makeSession({ created: 100, idle: 900 }),
     running: true,
-    messages: [],
+    startedAt: 100,
     endedAt: undefined,
   },
   {
     name: "an idle timestamp after creation ends the session",
     info: makeSession({ created: 100, idle: 900 }),
     running: false,
-    messages: [makeIdle("succeeded", undefined, 500)],
+    startedAt: 100,
     endedAt: 900,
   },
   {
-    name: "an idle timestamp before creation falls back to the latest message",
+    name: "an idle timestamp before creation is not an end",
     info: makeSession({ created: 900, idle: 100 }),
     running: false,
-    messages: [makeIdle("succeeded", undefined, 950), makeAssistant({ created: 1_000 })],
-    endedAt: 1_000,
+    startedAt: 900,
+    endedAt: undefined,
   },
   {
-    name: "a missing idle timestamp falls back to the latest message",
+    name: "a missing idle timestamp leaves an inactive session without an end",
     info: makeSession({ created: 100 }),
     running: false,
-    messages: [makeAssistant({ created: 400 })],
-    endedAt: 400,
+    startedAt: 100,
+    endedAt: undefined,
   },
   {
-    name: "no idle timestamp and no messages is unknown",
-    info: makeSession({ created: 100 }),
+    name: "a non-finite creation time has no start",
+    info: makeSession({ created: Number.NaN }),
     running: false,
-    messages: [],
+    startedAt: undefined,
     endedAt: undefined,
   },
 ];
 
 describe("sessionInterval", () => {
-  it.each(intervalCases)("$name", ({ info, running, messages, endedAt }) => {
-    expect(sessionInterval(info, running, messages)).toStrictEqual({
-      startedAt: info.time.created,
-      endedAt,
-    });
+  it.each(intervalCases)("$name", ({ info, running, startedAt, endedAt }) => {
+    expect(sessionInterval(info, running)).toStrictEqual({ startedAt, endedAt });
   });
 });

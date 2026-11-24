@@ -16,17 +16,17 @@ interface ToolCase {
 
 const toolCases: readonly ToolCase[] = [
   {
-    name: "read",
+    name: "read keeps only the basename",
     tool: { name: "read", input: { filePath: "C:\\project\\src\\model\\types.ts" } },
     expected: "Reading types.ts",
   },
   {
-    name: "edit",
+    name: "edit keeps only the basename",
     tool: { name: "edit", input: { filePath: "/project/src/session.ts" } },
     expected: "Editing session.ts",
   },
   {
-    name: "write",
+    name: "write keeps only the basename",
     tool: { name: "write", input: { filePath: "/project/src/session.ts" } },
     expected: "Editing session.ts",
   },
@@ -36,38 +36,38 @@ const toolCases: readonly ToolCase[] = [
     expected: "Editing files",
   },
   {
-    name: "shell with a description",
-    tool: { name: "shell", input: { description: "run tests" } },
-    expected: "Running run tests",
+    name: "shell never shows its description",
+    tool: { name: "shell", input: { description: "rm -rf /secret", command: "cat token" } },
+    expected: "Running command",
   },
   {
-    name: "shell without a description",
+    name: "shell without input",
     tool: { name: "shell", input: {} },
     expected: "Running command",
   },
   {
-    name: "grep with a pattern",
-    tool: { name: "grep", input: { pattern: "deriveStatus" } },
-    expected: "Searching deriveStatus",
+    name: "grep never shows its pattern",
+    tool: { name: "grep", input: { pattern: "secret-token" } },
+    expected: "Searching files",
   },
   {
-    name: "glob falls back to a path",
+    name: "glob never shows its path",
     tool: { name: "glob", input: { path: "src/**" } },
-    expected: "Searching src/**",
+    expected: "Searching files",
   },
   {
-    name: "list with a path",
+    name: "list never shows its path",
     tool: { name: "list", input: { path: "src/model" } },
-    expected: "Searching src/model",
+    expected: "Searching files",
   },
   {
     name: "grep without input",
     tool: { name: "grep" },
-    expected: "Searching repository",
+    expected: "Searching files",
   },
   {
-    name: "webfetch uses the URL host",
-    tool: { name: "webfetch", input: { url: "https://example.com/docs?q=1" } },
+    name: "webfetch uses only the URL host",
+    tool: { name: "webfetch", input: { url: "https://example.com/docs?q=secret" } },
     expected: "Fetching example.com",
   },
   {

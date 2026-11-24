@@ -10,17 +10,19 @@ import type {
 import type { Data } from "@opencode/client/solid";
 import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from "solid-js";
 
-import { delegations, detectBeams, type BeamSnapshot } from "../model/delegations";
+import { detectBeams, subagentCalls, type SubagentCall } from "../model/delegations";
 import { buildFleet, type SessionSnapshot } from "../model/fleet";
 import { resolveCost, type PriceTable } from "../model/pricing";
 import type { Beam, FleetView, LineStats, Money } from "../model/types";
 import { tokenTotal } from "../model/usage";
 
 export interface FleetData {
-  readonly session: Pick<
-    Data["session"],
-    "get" | "list" | "missing" | "root" | "status" | "cost" | "sync"
+  readonly session: Omit<
+    Pick<Data["session"], "get" | "list" | "missing" | "root" | "status" | "cost" | "sync">,
+    "get"
   > & {
+    /** The host store returns undefined for a session it has not loaded yet. */
+    get(sessionID: string): SessionInfo | undefined;
     readonly message: Pick<Data["session"]["message"], "list" | "sync">;
     readonly permission: Pick<Data["session"]["permission"], "list" | "sync">;
     readonly form: Pick<Data["session"]["form"], "list" | "sync">;
@@ -61,16 +63,57 @@ export interface FleetSource {
   open(sessionID: string): void;
 }
 
-interface Family {
-  readonly currentID: string;
-  readonly server: FleetServer;
+interface Anchor {
+  readonly session: FleetSession;
+  readonly data: FleetData;
+  readonly serverID: string;
+  readonly routedID: string;
   readonly rootID: string;
+  readonly connected: boolean;
+}
+
+interface Family extends Anchor {
   readonly root: SessionInfo;
   readonly children: SessionInfo[];
+  readonly descendants: SessionInfo[];
+}
+
+interface Hydration {
+  readonly scope: string;
+  readonly calls: ReadonlyMap<string, SubagentCall>;
+}
+
+function scopeKey(anchor: Anchor): string {
+  return `${anchor.serverID}\n${anchor.connected ? "on" : "off"}\n${anchor.rootID}`;
+}
+
+function sessionInfo(data: FleetData, sessionID: string): SessionInfo | undefined {
+  return data.session.get(sessionID);
+}
+
+function knownSessions(data: FleetData): SessionInfo[] {
+  return data.session.list().filter((info) => !data.session.missing(info.id));
 }
 
 function directChildren(data: FleetData, rootID: string): SessionInfo[] {
-  return data.session.list().filter((info) => info.parentID === rootID);
+  return knownSessions(data).filter((info) => info.parentID === rootID);
+}
+
+/** Every known descendant at any depth, so a grandchild's cost is never dropped. */
+function descendantsOf(data: FleetData, rootID: string): SessionInfo[] {
+  const all = knownSessions(data);
+  const byID = new Map(all.map((info) => [info.id, info]));
+  const under = (info: SessionInfo): boolean => {
+    const seen = new Set<string>([info.id]);
+    let parentID = info.parentID;
+    while (parentID !== undefined && !seen.has(parentID)) {
+      if (parentID === rootID) return true;
+      seen.add(parentID);
+      parentID = byID.get(parentID)?.parentID;
+    }
+    return false;
+  };
+  return all.filter((info) => info.id !== rootID && under(info));
 }
 
 function capitalize(value: string): string {
@@ -83,12 +126,9 @@ function modelFor(data: FleetData, location: LocationRef, ref: ModelRef): ModelI
     ?.find((model) => model.providerID === ref.providerID && model.modelID === ref.id);
 }
 
-function agentNameFor(data: FleetData, location: LocationRef, sessionID: string): string {
-  const info = data.session.missing(sessionID) ? undefined : data.session.get(sessionID);
-  const ref = info?.location ?? location;
-  const agentID = info?.agent ?? "unknown";
-  const agent = data.location.agent.list(ref)?.find((entry) => entry.id === agentID);
-  return agent?.name ?? capitalize(agentID);
+function agentNameFor(data: FleetData, info: SessionInfo): string {
+  const agent = data.location.agent.list(info.location)?.find((entry) => entry.id === info.agent);
+  return agent?.name ?? capitalize(info.agent ?? "unknown");
 }
 
 function latestSnapshotKey(messages: readonly SessionMessageInfo[]): number | undefined {
@@ -127,101 +167,16 @@ export function createFleetSource(host: FleetHost): FleetSource {
   const [prices, setPrices] = createSignal<PriceTable | undefined>(undefined);
   const [beams, setBeams] = createSignal<readonly Beam[]>([]);
   const [lines, setLines] = createSignal<ReadonlyMap<string, LineStats | undefined>>(new Map());
-  const [snapshotEpoch, setSnapshotEpoch] = createSignal(0);
-
-  const family = createMemo<Family | undefined>(() => {
-    const session = routed();
-    if (session === undefined) return undefined;
-    const data = session.server.data;
-    const rootID = data.session.root(session.id);
-    if (data.session.missing(rootID)) return undefined;
-    return {
-      currentID: session.id,
-      server: session.server,
-      rootID,
-      root: data.session.get(rootID),
-      children: directChildren(data, rootID),
-    };
-  });
+  const [hydration, setHydration] = createSignal<Hydration | undefined>(undefined);
 
   const synced = new Set<string>();
-  let lastConnectionKey: string | undefined;
-
-  function syncOnce(key: string, run: () => Promise<void>): void {
-    if (synced.has(key)) return;
-    synced.add(key);
-    run().catch(() => undefined);
-  }
-
-  createEffect(() => {
-    const session = routed();
-    const connected = session?.server.connected === true;
-    const serverID = session?.server.id ?? "";
-    const connectionKey = `${serverID}\n${connected ? "on" : "off"}`;
-    if (connectionKey !== lastConnectionKey) {
-      lastConnectionKey = connectionKey;
-      if (connected) synced.clear();
-    }
-    if (session === undefined || !connected) return;
-
-    const data = session.server.data;
-    syncOnce(`session\n${serverID}\n${session.id}`, () => data.session.sync(session.id));
-
-    const rootID = data.session.root(session.id);
-    syncOnce(`root\n${serverID}\n${rootID}`, () => data.session.sync(rootID, { children: true }));
-    if (data.session.missing(rootID)) return;
-
-    const root = data.session.get(rootID);
-    const location = root.location;
-    syncOnce(`agents\n${serverID}\n${location.directory}`, () =>
-      data.location.agent.sync(location),
-    );
-    syncOnce(`models\n${serverID}\n${location.directory}`, () =>
-      data.location.model.sync(location),
-    );
-
-    for (const info of [root, ...directChildren(data, rootID)]) {
-      syncOnce(`messages\n${serverID}\n${info.id}`, () => data.session.message.sync(info.id));
-      syncOnce(`permissions\n${serverID}\n${info.id}`, () => data.session.permission.sync(info.id));
-      syncOnce(`forms\n${serverID}\n${info.id}`, () =>
-        data.session.form.sync(info.id, info.location),
-      );
-    }
-  });
-
-  let lastAnchorKey: string | undefined;
-  let lastBeamConnectionKey: string | undefined;
-
-  createEffect(() => {
-    const session = routed();
-    const serverID = session?.server.id ?? "";
-    const rootID = session === undefined ? undefined : session.server.data.session.root(session.id);
-    const anchorKey = session === undefined ? undefined : `${serverID}\n${rootID}\n${session.id}`;
-    const connectionKey =
-      session === undefined ? undefined : `${serverID}\n${session.server.connected ? "on" : "off"}`;
-    if (anchorKey === lastAnchorKey && connectionKey === lastBeamConnectionKey) return;
-    lastAnchorKey = anchorKey;
-    lastBeamConnectionKey = connectionKey;
-    setSnapshotEpoch((epoch) => epoch + 1);
-  });
-
-  const beamSnapshot = createMemo<BeamSnapshot | undefined>(() => {
-    const currentFamily = family();
-    if (currentFamily === undefined) return undefined;
-    const data = currentFamily.server.data;
-    const tasks = delegations(data.session.message.list(currentFamily.rootID));
-    const toolIDs = new Set<string>();
-    const delegationTargets = new Map<string, string>();
-    for (const [childID, task] of tasks) {
-      toolIDs.add(task.toolID);
-      delegationTargets.set(task.toolID, childID);
-    }
-    const running = new Set<string>();
-    for (const child of currentFamily.children) {
-      if (data.session.status(child.id) === "running") running.add(child.id);
-    }
-    return { toolIDs, running, delegationTargets };
-  });
+  const lineKeys = new Map<string, number>();
+  const lineRequests = new Map<string, number>();
+  let lineRequestSequence = 0;
+  let syncScope: string | undefined;
+  let beamScope: string | undefined;
+  let beamPrevious: ReadonlyMap<string, SubagentCall> | undefined;
+  let pricesStarted = false;
 
   const beamTimers = new Set<ReturnType<typeof setTimeout>>();
 
@@ -244,51 +199,140 @@ export function createFleetSource(host: FleetHost): FleetSource {
 
   onCleanup(clearBeams);
 
-  let previousSnapshot: BeamSnapshot | undefined;
-  let skipSnapshot = true;
-  let seenEpoch = 0;
+  function resetScope(): void {
+    synced.clear();
+    setHydration(undefined);
+    beamScope = undefined;
+    beamPrevious = undefined;
+    clearBeams();
+    lineKeys.clear();
+    lineRequests.clear();
+    setLines(new Map());
+  }
+
+  function syncOnce(key: string, run: () => Promise<void>, done?: () => void): void {
+    if (synced.has(key)) return;
+    synced.add(key);
+    run().then(
+      () => done?.(),
+      () => {
+        synced.delete(key);
+      },
+    );
+  }
+
+  const anchor = createMemo<Anchor | undefined>(() => {
+    const session = routed();
+    if (session === undefined) return undefined;
+    return {
+      session,
+      data: session.server.data,
+      serverID: session.server.id,
+      routedID: session.id,
+      rootID: session.server.data.session.root(session.id),
+      connected: session.server.connected,
+    };
+  });
+
+  const family = createMemo<Family | undefined>(() => {
+    const current = anchor();
+    if (current === undefined) return undefined;
+    const root = sessionInfo(current.data, current.rootID);
+    if (root === undefined) return undefined;
+    return {
+      ...current,
+      root,
+      children: directChildren(current.data, current.rootID),
+      descendants: descendantsOf(current.data, current.rootID),
+    };
+  });
 
   createEffect(() => {
-    const epoch = snapshotEpoch();
-    if (epoch !== seenEpoch) {
-      seenEpoch = epoch;
-      previousSnapshot = undefined;
-      skipSnapshot = true;
-      clearBeams();
+    const current = anchor();
+    const scope = current === undefined ? undefined : scopeKey(current);
+    if (scope !== syncScope) {
+      syncScope = scope;
+      resetScope();
     }
-    const next = beamSnapshot();
-    if (next === undefined) {
-      previousSnapshot = undefined;
-      return;
+    if (current === undefined || scope === undefined || !current.connected) return;
+    const data = current.data;
+    if (data.session.missing(current.rootID)) return;
+
+    syncOnce(`${scope}\nrouted`, () => data.session.sync(current.routedID));
+    syncOnce(`${scope}\nroot`, () => data.session.sync(current.rootID, { children: true }));
+
+    const root = sessionInfo(data, current.rootID);
+    if (root === undefined) return;
+
+    const location = root.location;
+    syncOnce(`${scope}\nagents\n${location.directory}`, () => data.location.agent.sync(location));
+    syncOnce(`${scope}\nmodels\n${location.directory}`, () => data.location.model.sync(location));
+
+    for (const info of [root, ...directChildren(data, current.rootID)]) {
+      if (info.id === root.id) {
+        syncOnce(
+          `${scope}\nmessages\n${info.id}`,
+          () => data.session.message.sync(info.id),
+          () => {
+            if (syncScope !== scope) return;
+            setHydration({
+              scope,
+              calls: subagentCalls(data.session.message.list(info.id)),
+            });
+          },
+        );
+      } else {
+        syncOnce(`${scope}\nmessages\n${info.id}`, () => data.session.message.sync(info.id));
+      }
+      syncOnce(`${scope}\npermissions\n${info.id}`, () => data.session.permission.sync(info.id));
+      syncOnce(`${scope}\nforms\n${info.id}`, () => data.session.form.sync(info.id, info.location));
     }
-    if (previousSnapshot === undefined || skipSnapshot) {
-      previousSnapshot = next;
-      skipSnapshot = false;
-      return;
+  });
+
+  createEffect(() => {
+    const current = anchor();
+    if (current === undefined) return;
+    const scope = scopeKey(current);
+    const hydrated = hydration();
+    if (hydrated === undefined || hydrated.scope !== scope) return;
+    const next = subagentCalls(current.data.session.message.list(current.rootID));
+    if (beamScope !== scope || beamPrevious === undefined) {
+      beamScope = scope;
+      beamPrevious = hydrated.calls;
     }
-    const created = detectBeams(previousSnapshot, next);
-    previousSnapshot = next;
+    const created = detectBeams(hydrated.calls, beamPrevious, next);
+    beamPrevious = next;
     if (created.length > 0) addBeams(created);
   });
 
   const fleet = createMemo<FleetView | undefined>(() => {
-    const currentFamily = family();
-    if (currentFamily === undefined) return undefined;
-    const data = currentFamily.server.data;
-    const location = currentFamily.root.location;
+    const current = family();
+    if (current === undefined) return undefined;
+    const data = current.data;
+    const location = current.root.location;
+    const scope = scopeKey(current);
     const snapshot = (info: SessionInfo): SessionSnapshot => ({
       info,
       running: data.session.status(info.id) === "running",
       messages: data.session.message.list(info.id),
       permissions: data.session.permission.list(info.id).length,
       forms: data.session.form.list(info.id, info.location)?.length ?? 0,
-      lines: lines().get(`${currentFamily.server.id}\n${info.id}`),
+      lines: lines().get(`${scope}\n${info.id}`),
+    });
+    const costOnly = (info: SessionInfo): SessionSnapshot => ({
+      info,
+      running: false,
+      messages: [],
+      permissions: 0,
+      forms: 0,
+      lines: undefined,
     });
     return buildFleet({
-      root: snapshot(currentFamily.root),
-      children: currentFamily.children.map(snapshot),
-      currentID: currentFamily.currentID,
-      agentName: (sessionID) => agentNameFor(data, location, sessionID),
+      root: snapshot(current.root),
+      children: current.children.map(snapshot),
+      descendants: current.descendants.map(costOnly),
+      currentID: current.routedID,
+      agentName: (info) => agentNameFor(data, info),
       modelLabel: (ref) =>
         ref === undefined
           ? undefined
@@ -300,13 +344,9 @@ export function createFleetSource(host: FleetHost): FleetSource {
       contextLimit: (ref) =>
         ref === undefined ? undefined : modelFor(data, location, ref)?.limit.context,
       price: (tokens, ref) => priceFor(prices(), tokens, ref),
-      familyCost: data.session.cost(currentFamily.rootID),
+      familyCost: data.session.cost(current.rootID),
     });
   });
-
-  const lineKeys = new Map<string, number>();
-  const lineRequests = new Map<string, number>();
-  let lineRequestSequence = 0;
 
   function setLine(key: string, value: LineStats | undefined): void {
     setLines((current) => {
@@ -318,51 +358,50 @@ export function createFleetSource(host: FleetHost): FleetSource {
   }
 
   createEffect(() => {
-    const currentFamily = family();
-    if (currentFamily === undefined) return;
-    const server = currentFamily.server;
-    for (const info of [currentFamily.root, ...currentFamily.children]) {
-      const sessionKey = `${server.id}\n${info.id}`;
-      const key = latestSnapshotKey(server.data.session.message.list(info.id));
-      if (key === undefined) {
-        const hadKey = lineKeys.delete(sessionKey);
-        lineRequests.delete(sessionKey);
-        if (hadKey) setLine(sessionKey, undefined);
+    const current = family();
+    if (current === undefined) return;
+    const scope = scopeKey(current);
+    for (const info of [current.root, ...current.children]) {
+      const key = `${scope}\n${info.id}`;
+      const snapshotKey = latestSnapshotKey(current.data.session.message.list(info.id));
+      if (snapshotKey === undefined) {
+        const hadKey = lineKeys.delete(key);
+        lineRequests.delete(key);
+        if (hadKey) setLine(key, undefined);
         continue;
       }
-      if (lineKeys.get(sessionKey) === key) continue;
-      lineKeys.set(sessionKey, key);
+      if (lineKeys.get(key) === snapshotKey) continue;
+      lineKeys.set(key, snapshotKey);
       lineRequestSequence += 1;
       const request = lineRequestSequence;
-      lineRequests.set(sessionKey, request);
-      void server.client.session.diff({ sessionID: info.id }).then(
+      lineRequests.set(key, request);
+      void current.session.server.client.session.diff({ sessionID: info.id }).then(
         (files) => {
-          if (lineRequests.get(sessionKey) !== request) return;
-          lineRequests.delete(sessionKey);
-          setLine(sessionKey, sumLines(files));
+          if (lineRequests.get(key) !== request) return;
+          lineRequests.delete(key);
+          setLine(key, sumLines(files));
         },
         () => {
-          if (lineRequests.get(sessionKey) !== request) return;
-          lineRequests.delete(sessionKey);
-          setLine(sessionKey, undefined);
+          if (lineRequests.get(key) !== request) return;
+          lineRequests.delete(key);
+          setLine(key, undefined);
         },
       );
     }
   });
 
-  let pricesStarted = false;
-
   createEffect(() => {
     if (pricesStarted) return;
-    const currentFamily = family();
-    if (currentFamily === undefined) return;
-    const members = [currentFamily.root, ...currentFamily.children];
-    if (!members.some((info) => info.cost === 0 && tokenTotal(info.tokens) > 0)) return;
+    const current = family();
+    if (current === undefined) return;
+    const needsEstimate = [current.root, ...current.descendants].some((info) => {
+      const tokens = tokenTotal(info.tokens);
+      return info.cost === 0 && Number.isFinite(tokens) && tokens > 0;
+    });
+    if (!needsEstimate) return;
     pricesStarted = true;
     host.fetchPrices().then(
-      (table) => {
-        setPrices(table);
-      },
+      (table) => setPrices(table),
       () => undefined,
     );
   });
@@ -385,7 +424,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
     const member =
       sessionID === currentFamily.rootID ||
       currentFamily.children.some((info) => info.id === sessionID);
-    return member && !currentFamily.server.data.session.missing(sessionID);
+    return member && !currentFamily.data.session.missing(sessionID);
   }
 
   function canOpen(sessionID: string): boolean {
@@ -396,7 +435,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
   function open(sessionID: string): void {
     const currentFamily = family();
     if (currentFamily === undefined || !canOpenIn(currentFamily, sessionID)) return;
-    host.openTab(currentFamily.server.id, sessionID);
+    host.openTab(currentFamily.serverID, sessionID);
   }
 
   return { fleet, beams, now, canOpen, open };

@@ -136,6 +136,26 @@ describe("FleetPanel", () => {
     expect(reduced.querySelector(".bn-beam")).toBeNull();
   });
 
+  it("renders a safe failure category from the view model", () => {
+    const fleet = testFleet(testRoot(), [
+      runningChild({
+        status: "failed",
+        endedAt: TEST_NOW - 1000,
+        errorKind: "provider error",
+      }),
+    ]);
+    const host = mountPanel({ fleet });
+    const more = host.querySelector<HTMLButtonElement>(
+      '[data-bn-card="ses_child_a"] [data-bn-more]',
+    );
+
+    expect(host.textContent).toContain("Failed: provider error");
+    more?.click();
+    expect(host.querySelector("#bn-details-ses_child_a")?.textContent).toContain(
+      "Failed: provider error",
+    );
+  });
+
   it("links inactive agents with a quiet wire", () => {
     const host = mountPanel({ fleet: fleetWithFinished() });
     const wire = host.querySelector('[data-bn-wire="ses_child_done"]');

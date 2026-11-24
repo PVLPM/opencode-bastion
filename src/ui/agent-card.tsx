@@ -3,7 +3,7 @@ import { Show, createSignal } from "solid-js";
 import type { AgentView } from "../model/types";
 import type { Ui } from "@opencode/plugin/gui";
 import { ContextRing } from "./context-ring";
-import { formatClock, formatElapsed, formatMoney, formatTokens } from "./format";
+import { formatClock, formatElapsed, formatMoney, formatTokens } from "../model/format";
 import { ProviderLogo } from "./provider-logo";
 import { statusIcon, statusLabel } from "./status";
 import { ActivityTicker } from "./ticker";
@@ -26,7 +26,9 @@ function visibleLine(agent: AgentView): string | undefined {
       // What the session is blocked on matters more than its last activity.
       return agent.statusDetail ?? agent.activity;
     case "failed":
-      return agent.error ?? agent.statusDetail ?? agent.activity;
+      return agent.errorKind === undefined
+        ? (agent.statusDetail ?? agent.activity)
+        : `Failed: ${agent.errorKind}`;
     case "unknown":
       return agent.statusDetail ?? agent.task ?? agent.activity;
     case "done":
@@ -48,8 +50,13 @@ export function AgentCard(props: AgentCardProps) {
   const [expanded, setExpanded] = createSignal(false);
   const Icon = props.ui.Icon;
 
-  const elapsed = () => formatElapsed(props.agent.startedAt, props.agent.endedAt, props.now);
-  const taskText = () => props.agent.task ?? props.agent.prompt;
+  const elapsed = () =>
+    formatElapsed(
+      props.agent.startedAt,
+      props.agent.endedAt,
+      props.now,
+      props.agent.status === "running" || props.agent.status === "waiting",
+    );
   const detailsFor = () => detailsID(props.agent.sessionID);
   const openable = () => props.openable;
 
@@ -174,7 +181,7 @@ export function AgentCard(props: AgentCardProps) {
         <Show when={expanded()}>
           <div class="bn-card__details" id={detailsFor()}>
             <dl class="bn-dl">
-              <Show when={taskText()}>
+              <Show when={props.agent.task}>
                 {(task) => (
                   <div class="bn-dl__row">
                     <dt>Task</dt>
@@ -253,11 +260,11 @@ export function AgentCard(props: AgentCardProps) {
                   </div>
                 )}
               </Show>
-              <Show when={props.agent.error}>
-                {(error) => (
+              <Show when={props.agent.errorKind}>
+                {(kind) => (
                   <div class="bn-dl__row">
                     <dt>Error</dt>
-                    <dd class="bn-dl__error">{error()}</dd>
+                    <dd class="bn-dl__error">Failed: {kind()}</dd>
                   </div>
                 )}
               </Show>

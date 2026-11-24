@@ -1,4 +1,9 @@
-import type { SessionInfo, SessionMessageInfo, TokenUsageInfo } from "@opencode/client/promise";
+import type {
+  ModelRef,
+  SessionInfo,
+  SessionMessageInfo,
+  TokenUsageInfo,
+} from "@opencode/client/promise";
 
 import type { ContextUsage } from "./types";
 
@@ -6,42 +11,47 @@ export function tokenTotal(tokens: TokenUsageInfo): number {
   return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write;
 }
 
+function usableLimit(limit: number | undefined): number | undefined {
+  return limit !== undefined && Number.isFinite(limit) && limit > 0 ? limit : undefined;
+}
+
+/**
+ * Context usage of the latest token-bearing assistant, limited by the model that
+ * actually produced those tokens rather than the session's current model.
+ */
 export function contextUsage(
   messages: readonly SessionMessageInfo[],
-  limit: number | undefined,
+  limit: (ref: ModelRef) => number | undefined,
 ): ContextUsage | undefined {
-  if (!limit) return undefined;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.type === "compaction" && message.status === "completed") return undefined;
     if (message?.type === "assistant" && message.tokens !== undefined) {
-      return { used: tokenTotal(message.tokens), limit };
+      const used = tokenTotal(message.tokens);
+      if (!Number.isFinite(used) || used < 0) return undefined;
+      const resolved = usableLimit(limit(message.model));
+      return resolved === undefined ? undefined : { used, limit: resolved };
     }
   }
   return undefined;
 }
 
-function latestMessageTime(messages: readonly SessionMessageInfo[]): number | undefined {
-  let latest: number | undefined;
-  for (const message of messages) {
-    if (latest === undefined || message.time.created > latest) latest = message.time.created;
-  }
-  return latest;
-}
-
 export interface SessionInterval {
-  startedAt: number;
+  startedAt: number | undefined;
   endedAt: number | undefined;
 }
 
-export function sessionInterval(
-  info: SessionInfo,
-  running: boolean,
-  messages: readonly SessionMessageInfo[] = [],
-): SessionInterval {
-  const startedAt = info.time.created;
+/** An inactive session without an idle timestamp has no known end. */
+export function sessionInterval(info: SessionInfo, running: boolean): SessionInterval {
+  const created = info.time.created;
+  const startedAt = Number.isFinite(created) ? created : undefined;
   if (running) return { startedAt, endedAt: undefined };
   const idle = info.time.idle;
-  if (idle !== undefined && idle >= startedAt) return { startedAt, endedAt: idle };
-  return { startedAt, endedAt: latestMessageTime(messages) };
+  return {
+    startedAt,
+    endedAt:
+      startedAt !== undefined && idle !== undefined && Number.isFinite(idle) && idle >= startedAt
+        ? idle
+        : undefined,
+  };
 }

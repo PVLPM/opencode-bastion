@@ -3,6 +3,16 @@
 
 export type AgentStatus = "running" | "waiting" | "done" | "failed" | "unknown";
 
+/** A safe, short category for a failed execution; never the provider's raw message. */
+export type ErrorKind =
+  | "aborted"
+  | "authentication"
+  | "context limit"
+  | "output limit"
+  | "rate limit"
+  | "provider error"
+  | "error";
+
 export interface ModelLabel {
   readonly providerID: string;
   readonly modelID: string;
@@ -40,15 +50,13 @@ export interface AgentView {
   readonly activity: string | undefined;
   /** The delegation's short description, from the orchestrator's subagent call. */
   readonly task: string | undefined;
-  /** The delegation's full prompt, for the details disclosure. */
-  readonly prompt: string | undefined;
   readonly startedAt: number | undefined;
   /** Set once the session is idle. */
   readonly endedAt: number | undefined;
   readonly cost: Money | undefined;
   readonly context: ContextUsage | undefined;
   readonly lines: LineStats | undefined;
-  readonly error: string | undefined;
+  readonly errorKind: ErrorKind | undefined;
   /** The session routed in the app right now. */
   readonly current: boolean;
 }

@@ -1,7 +1,7 @@
 import { For, Show, createMemo } from "solid-js";
 
 import type { AgentStatus, AgentView, FleetView } from "../model/types";
-import { formatDuration } from "./format";
+import { formatDuration } from "../model/format";
 
 interface Bar {
   readonly sessionID: string;

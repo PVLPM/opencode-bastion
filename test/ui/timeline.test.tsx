@@ -50,6 +50,28 @@ describe("Timeline", () => {
     expect(bars[1]?.getAttribute("data-status")).toBe("waiting");
   });
 
+  it("leaves an inactive member without an end off the axis", () => {
+    const root = testRoot({ status: "done", startedAt: TEST_NOW - 100_000, endedAt: TEST_NOW });
+    const ended = runningChild({
+      status: "done",
+      startedAt: TEST_NOW - 50_000,
+      endedAt: TEST_NOW - 10_000,
+    });
+    const stale = runningChild({
+      sessionID: "ses_child_stale",
+      status: "done",
+      startedAt: TEST_NOW - 40_000,
+      endedAt: undefined,
+    });
+    const host = mountTimeline(testFleet(root, [ended, stale]), TEST_NOW);
+    const rows = [...host.querySelectorAll(".bn-timeline__row")];
+
+    expect(rows.map((row) => row.getAttribute("data-session"))).toStrictEqual([
+      "ses_root",
+      "ses_child_a",
+    ]);
+  });
+
   it("names each row with its agent and the full title on hover", () => {
     const root = testRoot({ status: "done", startedAt: TEST_NOW - 100_000, endedAt: TEST_NOW });
     const child = runningChild({ startedAt: TEST_NOW - 50_000 });

@@ -46,16 +46,12 @@ function toolActivity(part: SessionMessageAssistantTool): string | undefined {
     case "write":
     case "patch":
       return file === undefined ? "Editing files" : `Editing ${file}`;
-    case "shell": {
-      const description = inputText(input, "description");
-      return description === undefined ? "Running command" : `Running ${description}`;
-    }
+    case "shell":
+      return "Running command";
     case "grep":
     case "glob":
-    case "list": {
-      const target = inputText(input, "pattern") ?? inputText(input, "path");
-      return target === undefined ? "Searching repository" : `Searching ${target}`;
-    }
+    case "list":
+      return "Searching files";
     case "webfetch": {
       const host = urlHost(inputText(input, "url"));
       return host === undefined ? "Fetching page" : `Fetching ${host}`;
