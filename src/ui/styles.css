@@ -31,6 +31,7 @@
   --bn-success: var(--v2-state-fg-success, var(--icon-success-base, #6bd586));
   --bn-raised: var(--v2-elevation-raised, 0 0 0 0.5px #ffffff29);
   --bn-surface: var(--v2-background-bg-base, var(--background-base, #161616));
+  --bn-panel-bg: var(--bn-surface);
   --bn-card: var(--bn-surface);
   --bn-sunken: var(--bn-layer);
   --bn-radar-color: var(--bn-icon-muted);
@@ -47,6 +48,7 @@
   min-height: 0;
   padding: 6px 12px 0;
   overflow: hidden;
+  background: var(--bn-panel-bg);
   color: var(--bn-muted);
   font-family: var(
     --v2-font-family-sans,
@@ -866,6 +868,7 @@
   position: relative;
   overflow: auto;
   outline: none;
+  container-type: inline-size;
   transition: height 240ms var(--bn-ease-out);
 }
 
@@ -893,7 +896,7 @@
   grid-area: 1 / 1 / 3 / 3;
   align-self: start;
   height: 22px;
-  background: var(--bn-surface);
+  background: var(--bn-panel-bg);
   box-shadow: inset 0 -1px 0 var(--bn-border);
 }
 
@@ -904,7 +907,7 @@
   display: block;
   width: var(--bn-lane-label);
   height: 100%;
-  background: var(--bn-surface);
+  background: var(--bn-panel-bg);
 }
 
 .bn-lanes__ticks {
@@ -929,7 +932,7 @@
 .bn-lanes__now-label {
   translate: calc(-100% - 4px) 0;
   padding-inline: 4px 0;
-  background: var(--bn-surface);
+  background: var(--bn-panel-bg);
   color: var(--bn-muted);
   transition: transform 1000ms linear;
 }
@@ -943,7 +946,7 @@
   grid-area: 2 / 1 / 3 / 3;
   justify-self: start;
   width: var(--bn-lane-label);
-  background: var(--bn-surface);
+  background: var(--bn-panel-bg);
   box-shadow: 1px 0 0 var(--bn-border);
 }
 
@@ -987,31 +990,28 @@
 }
 
 .bn-link {
-  --bn-link: var(--bn-icon-muted);
-
   fill: none;
-  stroke: var(--bn-link);
+  stroke: var(--bn-icon-muted);
   stroke-linecap: round;
-  stroke-width: 1.25;
+  stroke-width: 1;
+  opacity: 0.35;
 }
 
-.bn-link[data-live="true"] {
-  --bn-link: var(--bn-accent);
+.bn-link[data-related="true"] {
+  stroke: var(--bn-accent);
+  opacity: 0.9;
 }
 
 .bn-link__path {
-  stroke-dasharray: 3 3;
-  stroke-opacity: 0.7;
+  stroke-dasharray: 2 3;
 }
 
 .bn-link[data-kind="followup"] .bn-link__path {
   stroke-dasharray: 0.5 3;
-  stroke-width: 1.5;
 }
 
 .bn-link__mark {
   stroke-linejoin: round;
-  stroke-opacity: 0.9;
 }
 
 /* Drawn in once, left to right along its run, when the handoff first appears. */
@@ -1035,6 +1035,25 @@
 
 .bn-lane[data-root="true"] {
   background: var(--bn-hover);
+  --bn-label-bg: linear-gradient(var(--bn-hover), var(--bn-hover)), var(--bn-panel-bg);
+}
+
+.bn-lane__watermark {
+  position: sticky;
+  right: 26px;
+  display: block;
+  width: min(360px, calc(100cqi - var(--bn-lane-label) - 34px));
+  margin-inline-start: auto;
+  margin-inline-end: 26px;
+  overflow: hidden;
+  color: var(--bn-muted);
+  opacity: 0.37;
+  font-size: 11px;
+  font-weight: 530;
+  line-height: 28px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Done is neutral; live and failed executions carry the native state tones. */
@@ -1068,7 +1087,7 @@
 }
 
 .bn-block:is([data-status="running"], [data-status="waiting"], [data-status="failed"]) {
-  background: color-mix(in srgb, var(--bn-tone) 16%, transparent);
+  background: color-mix(in srgb, var(--bn-tone) 16%, var(--bn-panel-bg));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bn-tone) 42%, transparent);
   color: var(--bn-text);
 }
@@ -1110,17 +1129,30 @@
   height: 20px;
   overflow: hidden;
   padding-inline: 6px 2px;
+  line-height: 20px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.bn-block__label::before {
+  position: absolute;
+  z-index: -1;
+  inset: 3px 0 3px var(--bn-inside);
+  background: var(--bn-label-bg, var(--bn-panel-bg));
+  content: "";
+}
+
+.bn-block__label > span {
+  display: block;
+  overflow: hidden;
   background: linear-gradient(
     to right,
-    var(--bn-inside-tone) var(--bn-inside),
-    var(--bn-faint) var(--bn-inside)
+    var(--bn-inside-tone) calc(var(--bn-inside) - 6px),
+    var(--bn-faint) calc(var(--bn-inside) - 6px)
   );
   background-clip: text;
   color: transparent;
-  line-height: 20px;
-  pointer-events: none;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .bn-block__label:is([data-status="running"], [data-status="waiting"], [data-status="failed"]) {
@@ -1132,23 +1164,69 @@
 }
 
 .bn-lanes__tip {
-  position: absolute;
+  position: fixed;
+  inset: auto;
   z-index: 10;
-  max-width: min(320px, calc(100% - 12px));
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--bn-layer-2);
+  visibility: hidden;
+  width: max-content;
+  max-width: min(340px, 100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--bn-border-base);
+  border-radius: 8px;
+  background: var(--bn-layer);
   box-shadow: var(--v2-elevation-floating, var(--bn-raised));
   color: var(--bn-text);
   font-size: 12px;
-  line-height: 16px;
-  pointer-events: none;
-  translate: -50% calc(-100% - 6px);
-  animation: bn-tip-in 140ms var(--bn-ease-out) both;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  line-height: 17px;
+  pointer-events: auto;
+}
+
+.bn-lanes__tip dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 3px 14px;
+  margin: 0;
+  padding: 9px 12px;
+}
+
+.bn-lanes__tip dl > div {
+  display: grid;
+  grid-column: span 2;
+  grid-template-columns: subgrid;
+}
+
+.bn-lanes__tip dl > div:first-child {
+  margin-block-end: 4px;
+  padding-block-end: 7px;
+  border-bottom: 1px solid var(--bn-border);
+}
+
+.bn-lanes__tip dt {
+  color: var(--bn-muted);
+}
+
+.bn-lanes__tip dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.bn-lanes__tip-text {
+  max-height: min(144px, 42dvh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bn-border-strong) transparent;
+  white-space: pre-wrap;
+}
+
+.bn-lanes__tip-text:focus-visible {
+  outline: 2px solid var(--bn-focus);
+  outline-offset: 2px;
 }
 
 /* Fit maps age, so every second all positions drift; glide between them. */
@@ -1156,7 +1234,8 @@
 :is(.bn-block, .bn-block__label, .bn-lanes__tick, .bn-lanes__grid) {
   transition:
     left 1000ms linear,
-    width 1000ms linear;
+    width 1000ms linear,
+    max-width 1000ms linear;
 }
 
 .bn-lanes__scroll[data-scale="fit"] .bn-link path {
@@ -1189,14 +1268,7 @@
 @keyframes bn-link-in {
   from {
     clip-path: inset(0 100% 0 0);
-    opacity: 0.4;
-  }
-}
-
-@keyframes bn-tip-in {
-  from {
     opacity: 0;
-    scale: 0.97;
   }
 }
 

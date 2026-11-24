@@ -78,6 +78,19 @@ describe("laneGeometry", () => {
     expect(first).toMatchObject({ x: START, width: 100, labelWidth: 300 - 6 });
     expect(second?.labelWidth).toBe(VIEWPORT - 6 - (second?.x ?? 0));
   });
+
+  it("keeps a label that repeats its subagent lane title inside the execution", () => {
+    const child = {
+      ...lane("ses_child", "Fixer", [
+        [0, 10],
+        [30, 40],
+      ]),
+      title: "Fixer 0",
+    };
+    const [title, followup] = geometry(50, lanesView([child])).lanes[0]?.blocks ?? [];
+    expect(title?.labelWidth).toBe(title?.width);
+    expect(followup?.labelWidth).toBeGreaterThan(followup?.width ?? 0);
+  });
   it("keeps follow-ups and drops calls whose child block is unknown", () => {
     const view = familyLanes();
     const unresolved = lanesView(view.lanes, [
@@ -108,6 +121,7 @@ describe("handoff connectors", () => {
     end: at(end),
     status: "done" as const,
     label: undefined,
+    text: undefined,
     labelWidth: 0,
     live,
   });

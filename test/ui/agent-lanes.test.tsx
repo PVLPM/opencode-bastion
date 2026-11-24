@@ -62,7 +62,7 @@ describe("AgentLanes", () => {
     expect(root).toHaveLength(2);
     const failed = host.querySelector('[data-bn-block="ses_fixer_b:0"]');
     expect(failed?.getAttribute("data-status")).toBe("failed");
-    expect(failed?.getAttribute("aria-label")).toBe("Fixer: Fixer 0, Failed, 17s");
+    expect(failed?.getAttribute("aria-label")).toBe("Fixer: Fixer 0, Failed");
     const label = failed?.parentElement?.querySelector(".bn-block__label");
     expect(label?.textContent).toBe("Fixer 0");
   });
@@ -131,14 +131,45 @@ describe("AgentLanes", () => {
     expect(scroller(host).dataset.scale).toBe("detail");
   });
 
-  it("anchors its tooltip to the hovered block, inside the region", () => {
+  it("lists the full task and metadata separately from the accessible block name", () => {
     const { host } = mountLanes(familyLanes());
     const block = host.querySelector<HTMLElement>('[data-bn-block="ses_fixer_b:0"]');
-    block?.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
-    const tip = host.querySelector('.bn-lanes [role="tooltip"]');
-    expect(tip?.textContent).toBe("Fixer: Fixer 0, Failed, 17s");
-    block?.dispatchEvent(new PointerEvent("pointerout", { bubbles: true }));
-    expect(host.querySelector('[role="tooltip"]')).toBeNull();
+    block?.dispatchEvent(new PointerEvent("pointerenter"));
+    const tip = host.querySelector(".bn-lanes__tip");
+    expect(tip?.getAttribute("popover")).toBe("manual");
+    expect([...(tip?.querySelectorAll("dt") ?? [])].map((term) => term.textContent)).toEqual([
+      "Task",
+      "Status",
+      "Started",
+      "Duration",
+    ]);
+    expect(tip?.querySelector("dd")?.textContent).toBe("Fixer 0\nFull execution text");
+    expect(tip?.querySelector("time")?.getAttribute("datetime")).toBe(
+      new Date(at(8)).toISOString(),
+    );
+    expect(tip?.querySelector("dl > :last-child dd")?.textContent).toBe("17s");
+  });
+
+  it("updates the open duration while an execution is live", () => {
+    const { host, setNow } = mountLanes(familyLanes());
+    const live = host.querySelector<HTMLElement>('[data-bn-block="ses_fixer_a:1"]');
+    live?.focus();
+    const duration = () => host.querySelector(".bn-lanes__tip dl > :last-child dd")?.textContent;
+    expect(duration()).toBe("15s");
+    setNow(55);
+    expect(duration()).toBe("20s");
+  });
+
+  it.each([
+    ["ses_root:0", ["call_a", "call_b"]],
+    ["ses_fixer_a:1", ["call_a2"]],
+  ])("emphasizes only the handoffs related to %s", (id, expected) => {
+    const { host } = mountLanes(familyLanes());
+    host.querySelector<HTMLElement>(`[data-bn-block="${id}"]`)?.focus();
+    const related = [...host.querySelectorAll("[data-related]")].map((link) =>
+      link.getAttribute("data-bn-link"),
+    );
+    expect(related).toEqual(expected);
   });
 
   it("collapses and expands the region from its bar", () => {

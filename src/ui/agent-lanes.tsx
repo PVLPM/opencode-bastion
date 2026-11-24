@@ -4,6 +4,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  createUniqueId,
   on,
   onCleanup,
   onMount,
@@ -25,6 +26,7 @@ import {
   outgrowsDetail,
 } from "./lane-geometry";
 import { statusLabel } from "./status";
+import { LaneTip } from "./lane-tip";
 
 export interface AgentLanesProps {
   readonly lanes: LanesView;
@@ -41,17 +43,11 @@ const RESERVED = 160;
 /** Width used before the scroller has been measured. */
 const FALLBACK_VIEWPORT = 240;
 const LANES_ID = "bn-lanes-body";
-const TIP_MARGIN = 6;
 
 const SCALE_OPTIONS: readonly { value: LaneScale; label: string; hint: string }[] = [
   { value: "fit", label: "Fit", hint: "Whole session; older time is compressed" },
   { value: "detail", label: "Detail", hint: "True time scale; scroll for earlier work" },
 ];
-
-function blockLabel(lane: LaneBox, block: BlockBox): string {
-  const what = block.label ?? lane.title ?? (lane.root ? "Orchestrator turn" : "Execution");
-  return `${lane.agent}: ${what}, ${statusLabel(block.status)}, ${formatDuration(block.end - block.start)}`;
-}
 
 /**
  * One execution: the block is exactly as long as it ran. Its label is a
@@ -62,29 +58,49 @@ function Block(props: {
   lane: () => LaneBox | undefined;
   block: () => BlockBox | undefined;
   enter: boolean;
+  inspection: Inspection;
 }) {
   // Read once: Solid re-runs an element's attribute effects together, and a
   // block that existed before mount must never start its entrance later.
   const enter = props.enter;
+  const tipID = createUniqueId();
+  let anchor: HTMLDivElement | undefined;
   return (
     <Show when={props.block()}>
       {(block) => {
         const text = () => block().label ?? props.lane()?.title;
+        const id = () => block().id;
+        const inspected = () => props.inspection.active() === id();
         return (
-          <>
+          <div
+            onFocusIn={() => props.inspection.focus(id())}
+            onFocusOut={(event) => {
+              if (
+                event.relatedTarget instanceof Node &&
+                event.currentTarget.contains(event.relatedTarget)
+              )
+                return;
+              props.inspection.blur(id());
+            }}
+          >
             <div
+              ref={(element) => {
+                anchor = element;
+              }}
               class="bn-block"
               role="img"
               tabindex="0"
-              aria-label={(() => {
-                const lane = props.lane();
-                return lane === undefined ? "" : blockLabel(lane, block());
-              })()}
+              aria-label={`${props.lane()?.agent}: ${text() ?? "Execution"}, ${statusLabel(block().status)}`}
+              aria-details={inspected() ? tipID : undefined}
               data-bn-block={block().id}
               data-status={block().status}
               data-live={block().live ? "true" : undefined}
               data-enter={enter ? "true" : undefined}
               style={{ left: `${block().x}px`, width: `${block().width}px` }}
+              onPointerEnter={(event) => {
+                if (event.pointerType !== "touch") props.inspection.hover(id());
+              }}
+              onPointerLeave={() => props.inspection.leave(id())}
             />
             <Show when={block().labelWidth > 0 && text()}>
               <span
@@ -94,14 +110,27 @@ function Block(props: {
                 data-enter={enter ? "true" : undefined}
                 style={{
                   left: `${block().x}px`,
-                  width: `${block().labelWidth}px`,
+                  "max-width": `${block().labelWidth}px`,
                   "--bn-inside": `${block().width}px`,
                 }}
               >
-                {text()}
+                <span>{text()}</span>
               </span>
             </Show>
-          </>
+            <Show when={inspected() && anchor}>
+              {(trigger) => (
+                <LaneTip
+                  id={tipID}
+                  anchor={trigger()}
+                  block={block()}
+                  prompt={props.lane()?.root === true}
+                  onEnter={() => props.inspection.hover(id())}
+                  onLeave={() => props.inspection.leave(id())}
+                  onDismiss={props.inspection.dismiss}
+                />
+              )}
+            </Show>
+          </div>
         );
       }}
     </Show>
@@ -113,6 +142,7 @@ function Lane(props: {
   index: Accessor<number>;
   ready: Accessor<boolean>;
   animate: boolean;
+  inspection: Inspection;
 }) {
   const blocks = createKeyed(
     () => props.lane()?.blocks ?? [],
@@ -125,12 +155,20 @@ function Lane(props: {
       data-root={props.lane()?.root ? "true" : undefined}
       style={{ top: `${props.index() * LANE_HEIGHT}px` }}
     >
+      <Show when={!props.lane()?.root && props.lane()?.title}>
+        {(title) => (
+          <span class="bn-lane__watermark" aria-hidden="true">
+            {title()}
+          </span>
+        )}
+      </Show>
       <For each={blocks.ids()}>
         {(id) => (
           <Block
             lane={props.lane}
             block={() => blocks.get(id)}
             enter={untrack(props.ready) && props.animate}
+            inspection={props.inspection}
           />
         )}
       </For>
@@ -138,11 +176,15 @@ function Lane(props: {
   );
 }
 
-interface Tip {
-  readonly text: string;
-  readonly x: number;
-  readonly y: number;
+interface Inspection {
+  readonly active: Accessor<string | undefined>;
+  readonly hover: (id: string) => void;
+  readonly leave: (id: string) => void;
+  readonly focus: (id: string) => void;
+  readonly blur: (id: string) => void;
+  readonly dismiss: () => void;
 }
+
 /**
  * Agent Lanes: one lane per session on a shared time axis, execution blocks at
  * their real start and end, live blocks reaching for now, and dashed handoff
@@ -159,37 +201,42 @@ export function AgentLanes(props: AgentLanesProps) {
   const [viewport, setViewport] = createSignal(FALLBACK_VIEWPORT);
   const [ready, setReady] = createSignal(false);
   const [drag, setDrag] = createSignal<{ y: number; height: number }>();
+  const [maxHeight, setMaxHeight] = createSignal(Number.POSITIVE_INFINITY);
   let region: HTMLElement | undefined;
   let scroller: HTMLDivElement | undefined;
   let labels: HTMLDivElement | undefined;
   let pinned = true;
-  let tipElement: HTMLDivElement | undefined;
-  const [tip, setTip] = createSignal<Tip>();
-
-  // The host tooltip anchors to its own trigger wrapper, which for an absolutely
-  // placed block is a zero-size box at the lane's left edge; this one anchors to
-  // the visible part of the hovered or focused block, inside the region.
-  const showTip = (target: EventTarget | null) => {
-    if (!(target instanceof Element) || region === undefined || scroller === undefined) return;
-    const block = target.closest<HTMLElement>("[data-bn-block]");
-    const text = block?.getAttribute("aria-label");
-    if (block === null || block === undefined || !text) return;
-    const box = block.getBoundingClientRect();
-    const frame = scroller.getBoundingClientRect();
-    const home = region.getBoundingClientRect();
-    const left = Math.max(box.left, frame.left + (labels?.offsetWidth ?? 0));
-    const right = Math.min(box.right, frame.right);
-    setTip({ text, x: (left + right) / 2 - home.left, y: box.top - home.top });
+  const [hovered, setHovered] = createSignal<string>();
+  const [focused, setFocused] = createSignal<string>();
+  let leaveTimer: ReturnType<typeof setTimeout> | undefined;
+  const dismiss = () => {
+    clearTimeout(leaveTimer);
+    setHovered(undefined);
+    setFocused(undefined);
   };
-  const hideTip = () => setTip(undefined);
-
-  createEffect(() => {
-    const current = tip();
-    if (current === undefined || tipElement === undefined || region === undefined) return;
-    const half = tipElement.offsetWidth / 2;
-    const max = region.clientWidth - half - TIP_MARGIN;
-    tipElement.style.left = `${Math.max(half + TIP_MARGIN, Math.min(max, current.x))}px`;
-  });
+  const inspection: Inspection = {
+    active: createMemo(() => (open() ? (hovered() ?? focused()) : undefined)),
+    hover(id) {
+      clearTimeout(leaveTimer);
+      setHovered(id);
+    },
+    leave(id) {
+      if (hovered() !== id) return;
+      clearTimeout(leaveTimer);
+      leaveTimer = setTimeout(() => setHovered(undefined), 250);
+    },
+    focus(id) {
+      clearTimeout(leaveTimer);
+      setHovered(undefined);
+      setFocused(id);
+    },
+    blur(id) {
+      if (focused() === id) setFocused(undefined);
+      if (hovered() === id) setHovered(undefined);
+    },
+    dismiss,
+  };
+  onCleanup(() => clearTimeout(leaveTimer));
 
   // Until the user picks a scale, a session the Detail view would have to scroll opens in Fit.
   const [chosen, setChosen] = createSignal<LaneScale>();
@@ -213,14 +260,16 @@ export function AgentLanes(props: AgentLanesProps) {
     (connector) => connector.id,
   );
 
-  const maxHeight = () => {
-    const host = region?.parentElement?.clientHeight ?? 0;
-    return host > 0 ? Math.max(MIN_LANES_HEIGHT, host - RESERVED) : Number.POSITIVE_INFINITY;
-  };
   const resize = (next: number) =>
     setHeight(Math.round(Math.min(maxHeight(), Math.max(MIN_LANES_HEIGHT, next))));
 
   const measure = () => {
+    const host = region?.parentElement?.clientHeight ?? 0;
+    if (host > 0) {
+      const limit = Math.max(MIN_LANES_HEIGHT, host - RESERVED);
+      setMaxHeight(limit);
+      if (height() > limit) resize(limit);
+    }
     if (scroller === undefined) return;
     const width = scroller.clientWidth - (labels?.offsetWidth ?? 0);
     setViewport(width > 0 ? width : FALLBACK_VIEWPORT);
@@ -233,7 +282,6 @@ export function AgentLanes(props: AgentLanesProps) {
   };
 
   const onScroll = () => {
-    hideTip();
     if (scroller === undefined) return;
     pinned = scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 4;
   };
@@ -245,6 +293,8 @@ export function AgentLanes(props: AgentLanesProps) {
     if (!("ResizeObserver" in window)) return;
     const observer = new ResizeObserver(measure);
     if (scroller !== undefined) observer.observe(scroller);
+    if (region?.parentElement !== null && region?.parentElement !== undefined)
+      observer.observe(region.parentElement);
     measure();
     followNewest();
     onCleanup(() => observer.disconnect());
@@ -304,7 +354,10 @@ export function AgentLanes(props: AgentLanesProps) {
           type="button"
           aria-expanded={open()}
           aria-controls={LANES_ID}
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => {
+            dismiss();
+            setOpen((value) => !value);
+          }}
         >
           <Icon name="chevron-down" size="small" class="bn-lanes__chevron" />
           <span class="bn-lanes__title">Lanes</span>
@@ -405,13 +458,7 @@ export function AgentLanes(props: AgentLanesProps) {
                     <span class="bn-lanes__grid" style={{ left: `${ticks.get(key)?.x ?? 0}px` }} />
                   )}
                 </For>
-                <div
-                  class="bn-lanes__rows"
-                  onPointerOver={(event) => showTip(event.target)}
-                  onPointerOut={hideTip}
-                  onFocusIn={(event) => showTip(event.target)}
-                  onFocusOut={hideTip}
-                >
+                <div class="bn-lanes__rows">
                   <For each={lanes.ids()}>
                     {(id, index) => (
                       <Lane
@@ -419,6 +466,7 @@ export function AgentLanes(props: AgentLanesProps) {
                         index={index}
                         ready={ready}
                         animate={props.animate}
+                        inspection={inspection}
                       />
                     )}
                   </For>
@@ -440,6 +488,12 @@ export function AgentLanes(props: AgentLanesProps) {
                               data-bn-link={id}
                               data-kind={link().kind}
                               data-live={link().live ? "true" : undefined}
+                              data-related={
+                                inspection.active() === link().to ||
+                                (link().from !== undefined && inspection.active() === link().from)
+                                  ? "true"
+                                  : undefined
+                              }
                               data-enter={enter ? "true" : undefined}
                             >
                               <path class="bn-link__path" d={link().d} />
@@ -461,20 +515,6 @@ export function AgentLanes(props: AgentLanesProps) {
           )}
         </Show>
       </div>
-      <Show when={tip()}>
-        {(current) => (
-          <div
-            class="bn-lanes__tip"
-            role="tooltip"
-            ref={(element) => {
-              tipElement = element;
-            }}
-            style={{ left: `${current().x}px`, top: `${current().y}px` }}
-          >
-            {current().text}
-          </div>
-        )}
-      </Show>
     </section>
   );
 }

@@ -49,6 +49,7 @@ export interface BlockBox {
   readonly end: number;
   readonly status: AgentStatus;
   readonly label: string | undefined;
+  readonly text: string | undefined;
   /** Room for the label from the block's left edge to the next block (0: no label). */
   readonly labelWidth: number;
   readonly live: boolean;
@@ -70,6 +71,8 @@ interface Tick {
 
 interface Connector {
   readonly id: string;
+  readonly from: string | undefined;
+  readonly to: string;
   readonly kind: Handoff["kind"];
   /** The child block it feeds is still running. */
   readonly live: boolean;
@@ -258,16 +261,19 @@ export function laneGeometry(
       const end = block.end ?? Math.max(now, block.start);
       const left = x(block.start);
       const next = lane.blocks[index + 1];
-      // A label may run past a short block into the empty lane up to the next block.
-      const room = (next === undefined ? width : x(next.start)) - LABEL_GAP - left;
+      const blockWidth = Math.max(MIN_BLOCK, x(end) - left);
+      const gapRoom = (next === undefined ? width : x(next.start)) - LABEL_GAP - left;
+      const repeatsTitle = !lane.root && (block.label ?? lane.title) === lane.title;
+      const room = repeatsTitle ? Math.min(gapRoom, blockWidth) : gapRoom;
       return {
         id: block.id,
         x: left,
-        width: Math.max(MIN_BLOCK, x(end) - left),
+        width: blockWidth,
         start: block.start,
         end,
         status: block.status,
         label: block.label,
+        text: block.text,
         labelWidth: room >= MIN_LABEL ? room : 0,
         live: block.end === undefined,
       };
@@ -295,6 +301,8 @@ export function laneGeometry(
     });
     connectors.push({
       id: handoff.id,
+      from: rootBlocks.findLast((prompt) => prompt.start <= handoff.at)?.id,
+      to: block.id,
       kind: handoff.kind,
       live: block.live,
       d: path.d,
