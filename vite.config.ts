@@ -6,5 +6,7 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [gui({ entry: "src/gui.tsx", outFile: "dist/gui-experimental.cjs" })],
   resolve: { dedupe: ["solid-js", "solid-js/web", "solid-js/store"] },
-  build: { sourcemap: false },
+  // Overwrite the single bundle in place: emptying dist/ makes a running Desktop
+  // briefly fail to read it (PluginNotFoundError in main.log) during every build.
+  build: { sourcemap: false, emptyOutDir: false },
 });
