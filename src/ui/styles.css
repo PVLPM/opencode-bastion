@@ -30,19 +30,23 @@
   --bn-danger: var(--v2-state-fg-danger, var(--icon-critical-base, #f17471));
   --bn-success: var(--v2-state-fg-success, var(--icon-success-base, #6bd586));
   --bn-raised: var(--v2-elevation-raised, 0 0 0 0.5px #ffffff29);
-  --bn-card: var(--v2-background-bg-base, var(--background-base, #161616));
+  --bn-surface: var(--v2-background-bg-base, var(--background-base, #161616));
+  --bn-card: var(--bn-surface);
+  --bn-sunken: var(--bn-layer);
   --bn-radar-color: var(--bn-icon-muted);
+  --bn-wire: color-mix(in srgb, var(--bn-accent) 85%, transparent);
+  --bn-wire-quiet: var(--bn-icon-faint);
   --bn-ease: cubic-bezier(0.2, 0, 0, 1);
+  --bn-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --bn-ease-move: cubic-bezier(0.77, 0, 0.175, 1);
 
   position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  padding: 6px 12px 12px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
+  padding: 6px 12px 0;
+  overflow: hidden;
   color: var(--bn-muted);
   font-family: var(
     --v2-font-family-sans,
@@ -58,7 +62,31 @@
 /* Native dark surfaces: cards sit on layer 01 and busy marks use the base icon color. */
 :where([data-color-scheme="dark"]) .bn-panel {
   --bn-card: var(--bn-layer);
+  --bn-sunken: color-mix(in srgb, var(--bn-layer) 50%, var(--bn-surface));
   --bn-radar-color: var(--bn-icon);
+}
+
+/* Scrollbars as in native panes: transparent until the pointer is over the area. */
+.bn-cards,
+.bn-lanes__scroll {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.bn-cards:hover,
+.bn-lanes__scroll:hover {
+  scrollbar-color: var(--bn-border-strong) transparent;
+}
+
+/* Only the card list scrolls vertically; the header stays and the lanes dock below. */
+.bn-cards {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-inline: -12px;
+  padding: 2px 12px 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 :where(.bn-panel) button {
@@ -199,12 +227,25 @@
 
 .bn-wire {
   fill: none;
-  stroke: var(--bn-icon-faint);
-  stroke-width: 1;
+  stroke: var(--bn-wire);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  transition: stroke 240ms ease;
 }
 
 .bn-wire--quiet {
-  stroke: var(--bn-border-strong);
+  stroke: var(--bn-wire-quiet);
+}
+
+/* Only while cards glide to new places (see flip.ts) do their wires glide with them. */
+.bn-tree[data-bn-gliding] .bn-wire {
+  transition:
+    stroke 240ms ease,
+    d 320ms var(--bn-ease-move);
+}
+
+.bn-wire__node {
+  fill: var(--bn-surface);
 }
 
 .bn-beam {
@@ -249,9 +290,13 @@
   container: bn-card / inline-size;
 }
 
+/*
+ * Elevation means live. Finished cards recede onto a quieter surface with the
+ * native 0.5 px hairline (the composer pill's resting edge); text keeps its tone.
+ */
 .bn-card[data-inactive="true"] {
-  background: var(--bn-card);
-  box-shadow: inset 0 0 0 1px var(--bn-border);
+  background: var(--bn-sunken);
+  box-shadow: 0 0 0 0.5px var(--bn-border-base);
 }
 
 .bn-card[data-current="true"] {
@@ -330,6 +375,7 @@
   overflow: hidden;
   color: var(--bn-text);
   font-size: 13px;
+  font-weight: 530;
   text-overflow: ellipsis;
 }
 
@@ -478,6 +524,7 @@
 }
 
 .bn-model__name {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -516,6 +563,13 @@
   color: var(--bn-danger);
 }
 
+/*
+ * Narrow priority for row 3, first to give way first: the +/- line counts
+ * (they move to the details), then the metric gaps tighten, then the context
+ * ring (its value is in the details too), then the effort truncates (it shrinks
+ * a hundred times faster than the name). Only then does the model name
+ * ellipsize. Cost and duration never drop; duration is the last to lose room.
+ */
 @container bn-card (max-width: 300px) {
   .bn-lines {
     display: none;
@@ -524,6 +578,19 @@
   .bn-row--meta,
   .bn-metrics {
     gap: 6px;
+  }
+
+  .bn-model__effort {
+    flex: 0 100 auto;
+    min-width: 3ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@container bn-card (max-width: 280px) {
+  .bn-metrics__tip:has(> .bn-ring) {
+    display: none;
   }
 }
 
@@ -578,6 +645,37 @@
 }
 
 /* Details ----------------------------------------------------------------- */
+/* Height and fade together, interruptible both ways (transitions retarget mid-flight). */
+.bn-reveal {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 240ms var(--bn-ease-out),
+    opacity 160ms ease;
+}
+
+.bn-reveal[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 260ms var(--bn-ease-out),
+    opacity 200ms ease 40ms;
+}
+
+@starting-style {
+  .bn-reveal[data-open="true"] {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+}
+
+.bn-reveal__inner {
+  min-height: 0;
+  overflow: hidden;
+}
 .bn-card__details {
   position: relative;
   z-index: 2;
@@ -625,68 +723,481 @@
   -webkit-line-clamp: 4;
 }
 
-/* Timeline ---------------------------------------------------------------- */
-.bn-timeline {
-  margin-top: 12px;
-  padding-top: 8px;
-  border-top: 1px solid var(--bn-border);
+/* Agent Lanes ------------------------------------------------------------- */
+/*
+ * Row metrics (axis 22 px, lane 28 px, block 20 px) mirror `lane-geometry.ts`.
+ * The axis sticks to the top and the agent names to the left, so both stay in
+ * view while the region scrolls in either direction.
+ */
+.bn-lanes {
+  --bn-lane-label: 92px;
+
+  position: relative;
+  flex: none;
+  margin-inline: -12px;
+  border-top: 1px solid var(--bn-border-base);
 }
 
-.bn-timeline__head {
+.bn-lanes[data-dragging="true"] {
+  cursor: row-resize;
+  user-select: none;
+}
+
+.bn-lanes__handle {
+  position: absolute;
+  inset: -5px 0 auto;
+  z-index: 5;
+  height: 9px;
+  outline: none;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.bn-lanes__handle::after {
+  content: "";
+  position: absolute;
+  inset: 3px 0 auto;
+  height: 3px;
+  background: var(--bn-icon-muted);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+@media (hover: hover) {
+  .bn-lanes__handle:hover::after {
+    opacity: 0.5;
+    transition-delay: 200ms;
+  }
+
+  .bn-lanes__toggle:hover {
+    color: var(--bn-muted);
+  }
+
+  .bn-seg__item:hover:not([aria-checked="true"]) {
+    color: var(--bn-muted);
+  }
+}
+
+.bn-lanes[data-dragging="true"] .bn-lanes__handle::after {
+  opacity: 0.7;
+  transition-delay: 0ms;
+}
+
+.bn-lanes__handle:focus-visible::after {
+  background: var(--bn-focus);
+  opacity: 1;
+}
+
+.bn-lanes__bar {
   display: flex;
-  justify-content: space-between;
-  margin-bottom: 6px;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding-inline: 4px 14px;
   color: var(--bn-faint);
   font-size: 11px;
 }
 
-.bn-timeline__rows {
+.bn-lanes__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding-inline: 4px 6px;
+  border-radius: 6px;
+  font-weight: 530;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.bn-lanes__toggle:focus-visible,
+.bn-seg__item:focus-visible {
+  outline: 2px solid var(--bn-focus);
+  outline-offset: -2px;
+}
+
+/* A small, quiet segmented control, as in the native settings panes. */
+.bn-seg {
+  display: inline-flex;
+  padding: 1px;
+  border-radius: 6px;
+  background: var(--bn-layer-2);
+  box-shadow: inset 0 0 0 0.5px var(--bn-border-base);
+}
+
+.bn-seg__item {
+  height: 18px;
+  padding-inline: 7px;
+  border-radius: 5px;
+  color: var(--bn-faint);
+  font-weight: 530;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.bn-seg__item[aria-checked="true"] {
+  background: var(--bn-card);
+  box-shadow: var(--bn-raised);
+  color: var(--bn-text);
+}
+
+.bn-lanes__chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--bn-icon-muted);
+  transition: rotate 160ms var(--bn-ease);
+}
+
+.bn-lanes:not([data-open]) .bn-lanes__chevron {
+  rotate: -90deg;
+}
+
+.bn-lanes__span {
+  font-variant-numeric: tabular-nums;
+  margin-inline-start: auto;
+  font-weight: 440;
+}
+
+/* Collapsing animates the region's height (a disclosure, like an accordion); dragging is instant. */
+.bn-lanes__scroll {
+  position: relative;
+  overflow: auto;
+  outline: none;
+  transition: height 240ms var(--bn-ease-out);
+}
+
+.bn-lanes[data-dragging="true"] .bn-lanes__scroll {
+  transition: none;
+}
+
+.bn-lanes__scroll:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--bn-focus);
+}
+
+.bn-lanes__canvas {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--bn-lane-label) auto;
+  grid-template-rows: 22px 1fr;
+  min-width: 100%;
+  font-size: 11px;
+}
+
+.bn-lanes__axis {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  grid-area: 1 / 1 / 3 / 3;
+  align-self: start;
+  height: 22px;
+  background: var(--bn-surface);
+  box-shadow: inset 0 -1px 0 var(--bn-border);
+}
+
+.bn-lanes__corner {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: block;
+  width: var(--bn-lane-label);
+  height: 100%;
+  background: var(--bn-surface);
+}
+
+.bn-lanes__ticks {
+  position: absolute;
+  inset: 0 0 0 var(--bn-lane-label);
+}
+
+.bn-lanes__tick,
+.bn-lanes__now-label {
+  font-variant-numeric: tabular-nums;
+  position: absolute;
+  top: 3px;
+  left: 0;
+  color: var(--bn-faint);
+  white-space: nowrap;
+}
+
+.bn-lanes__tick {
+  padding-inline-start: 4px;
+}
+
+.bn-lanes__now-label {
+  translate: calc(-100% - 4px) 0;
+  padding-inline: 4px 0;
+  background: var(--bn-surface);
+  color: var(--bn-muted);
+  transition: transform 1000ms linear;
+}
+
+.bn-lanes__labels {
+  position: sticky;
+  left: 0;
+  z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  grid-area: 2 / 1 / 3 / 3;
+  justify-self: start;
+  width: var(--bn-lane-label);
+  background: var(--bn-surface);
+  box-shadow: 1px 0 0 var(--bn-border);
 }
 
-.bn-timeline__row {
-  display: grid;
-  grid-template-columns: minmax(0, 78px) minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-}
-
-.bn-timeline__label {
+.bn-lanes__label {
+  height: 28px;
   overflow: hidden;
+  padding-inline: 12px 8px;
   color: var(--bn-muted);
-  font-size: 11px;
+  line-height: 28px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.bn-timeline__track {
+.bn-lanes__label[data-root="true"] {
+  color: var(--bn-text);
+  font-weight: 530;
+}
+
+.bn-lanes__track {
   position: relative;
-  height: 4px;
-  border-radius: 9999px;
+  z-index: 0;
+  grid-area: 1 / 2 / 3 / 3;
+  isolation: isolate;
+}
+
+.bn-lanes__grid {
+  position: absolute;
+  top: 16px;
+  bottom: 0;
+  width: 1px;
   background: var(--bn-border);
 }
 
-.bn-timeline__bar {
+/* Above the blocks, so a connector's caret lands visibly on the block it fed. */
+.bn-lanes__links {
   position: absolute;
-  top: 0;
+  inset: 0 auto auto 0;
+  z-index: 2;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.bn-link {
+  --bn-link: var(--bn-icon-muted);
+
+  fill: none;
+  stroke: var(--bn-link);
+  stroke-linecap: round;
+  stroke-width: 1.25;
+}
+
+.bn-link[data-live="true"] {
+  --bn-link: var(--bn-accent);
+}
+
+.bn-link__path {
+  stroke-dasharray: 3 3;
+  stroke-opacity: 0.7;
+}
+
+.bn-link[data-kind="followup"] .bn-link__path {
+  stroke-dasharray: 0.5 3;
+  stroke-width: 1.5;
+}
+
+.bn-link__mark {
+  stroke-linejoin: round;
+  stroke-opacity: 0.9;
+}
+
+/* Drawn in once, left to right along its run, when the handoff first appears. */
+.bn-link[data-enter="true"] {
+  animation: bn-link-in 480ms var(--bn-ease-out) both;
+}
+
+/* No stacking context here: blocks (1) sit under the connectors (2), labels (3) above both. */
+.bn-lanes__rows {
+  position: absolute;
+  inset: 22px 0 0;
+  pointer-events: none;
+}
+
+.bn-lane {
+  position: absolute;
+  inset-inline: 0;
+  height: 28px;
+  box-shadow: inset 0 -1px 0 var(--bn-border);
+}
+
+.bn-lane[data-root="true"] {
+  background: var(--bn-hover);
+}
+
+/* Done is neutral; live and failed executions carry the native state tones. */
+.bn-block {
+  --bn-tone: var(--bn-icon-faint);
+
+  position: absolute;
+  top: 4px;
+  z-index: 1;
+  height: 20px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--bn-layer-2);
+  box-shadow: inset 0 0 0 1px var(--bn-border-base);
+  color: var(--bn-muted);
+  line-height: 20px;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+.bn-block[data-status="running"] {
+  --bn-tone: var(--bn-accent);
+}
+
+.bn-block[data-status="waiting"] {
+  --bn-tone: var(--bn-warn);
+}
+
+.bn-block[data-status="failed"] {
+  --bn-tone: var(--bn-danger);
+}
+
+.bn-block:is([data-status="running"], [data-status="waiting"], [data-status="failed"]) {
+  background: color-mix(in srgb, var(--bn-tone) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bn-tone) 42%, transparent);
+  color: var(--bn-text);
+}
+
+.bn-block[data-status="unknown"] {
+  background: transparent;
+  box-shadow: none;
+  outline: 1px dashed var(--bn-border-strong);
+  outline-offset: -1px;
+}
+
+/* A live execution reaches for now: a bright leading edge that grows each second. */
+.bn-block[data-live="true"] {
+  box-shadow:
+    inset -2px 0 0 var(--bn-tone),
+    inset 0 0 0 1px color-mix(in srgb, var(--bn-tone) 42%, transparent);
+  transition: width 1000ms linear;
+}
+
+.bn-block[data-enter="true"] {
+  animation: bn-block-in 320ms var(--bn-ease) both;
+}
+
+.bn-block:focus-visible {
+  outline: 2px solid var(--bn-focus);
+  outline-offset: 1px;
+}
+
+/*
+ * The label is its own layer: full tone over the block, a quieter tone where it
+ * runs on into the empty lane, and an ellipsis only before the next block.
+ */
+.bn-block__label {
+  --bn-inside-tone: var(--bn-muted);
+
+  position: absolute;
+  top: 4px;
+  z-index: 3;
+  height: 20px;
+  overflow: hidden;
+  padding-inline: 6px 2px;
+  background: linear-gradient(
+    to right,
+    var(--bn-inside-tone) var(--bn-inside),
+    var(--bn-faint) var(--bn-inside)
+  );
+  background-clip: text;
+  color: transparent;
+  line-height: 20px;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bn-block__label:is([data-status="running"], [data-status="waiting"], [data-status="failed"]) {
+  --bn-inside-tone: var(--bn-text);
+}
+
+.bn-block__label[data-enter="true"] {
+  animation: bn-fade-in 240ms var(--bn-ease-out) 80ms both;
+}
+
+.bn-lanes__tip {
+  position: absolute;
+  z-index: 10;
+  max-width: min(320px, calc(100% - 12px));
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--bn-layer-2);
+  box-shadow: var(--v2-elevation-floating, var(--bn-raised));
+  color: var(--bn-text);
+  font-size: 12px;
+  line-height: 16px;
+  pointer-events: none;
+  translate: -50% calc(-100% - 6px);
+  animation: bn-tip-in 140ms var(--bn-ease-out) both;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* Fit maps age, so every second all positions drift; glide between them. */
+.bn-lanes__scroll[data-scale="fit"]
+:is(.bn-block, .bn-block__label, .bn-lanes__tick, .bn-lanes__grid) {
+  transition:
+    left 1000ms linear,
+    width 1000ms linear;
+}
+
+.bn-lanes__scroll[data-scale="fit"] .bn-link path {
+  transition: d 1000ms linear;
+}
+
+.bn-lanes__now {
+  position: absolute;
+  top: 16px;
   bottom: 0;
-  min-width: 2px;
-  border-radius: 9999px;
-  background: var(--bn-icon-faint);
+  left: 0;
+  z-index: 2;
+  width: 1px;
+  background: color-mix(in srgb, var(--bn-accent) 55%, transparent);
+  transition: transform 1000ms linear;
 }
 
-.bn-timeline__bar[data-status="running"] {
-  background: var(--bn-accent);
+@keyframes bn-block-in {
+  from {
+    clip-path: inset(0 100% 0 0 round 4px);
+  }
 }
 
-.bn-timeline__bar[data-status="waiting"] {
-  background: var(--bn-warn);
+@keyframes bn-fade-in {
+  from {
+    opacity: 0;
+  }
 }
 
-.bn-timeline__bar[data-status="failed"] {
-  background: var(--bn-danger);
+@keyframes bn-link-in {
+  from {
+    clip-path: inset(0 100% 0 0);
+    opacity: 0.4;
+  }
+}
+
+@keyframes bn-tip-in {
+  from {
+    opacity: 0;
+    scale: 0.97;
+  }
 }
 
 /* Reduced motion ---------------------------------------------------------- */

@@ -60,6 +60,7 @@ export default Plugin.define({
       render: () => (
         <FleetPanel
           fleet={source.fleet()}
+          lanes={source.lanes()}
           beams={source.beams()}
           now={source.now()}
           onOpen={source.open}

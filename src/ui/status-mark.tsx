@@ -1,7 +1,8 @@
-import { Match, Switch } from "solid-js";
+import { Match, Switch, createEffect, on } from "solid-js";
 
 import type { AgentView } from "../model/types";
 import type { Ui } from "@opencode/plugin/gui";
+import { canAnimate } from "./motion";
 import { statusTip } from "./status";
 
 /**
@@ -10,14 +11,46 @@ import { statusTip } from "./status";
  * it failed. Finished work gets a quiet check and an unknown end a hollow ring,
  * so a card never shows a word-pill where the host shows a mark.
  */
-export function StatusMark(props: { agent: AgentView; ui: Pick<Ui, "Icon" | "Tooltip"> }) {
+export function StatusMark(props: {
+  agent: AgentView;
+  animate: boolean;
+  ui: Pick<Ui, "Icon" | "Tooltip">;
+}) {
   const Icon = props.ui.Icon;
   const Tooltip = props.ui.Tooltip;
   const tip = () => statusTip(props.agent);
+  let mark: HTMLSpanElement | undefined;
+
+  // A status change swaps the glyph; the new one settles in from slightly
+  // smaller so the change reads as one mark turning into another, never on mount.
+  createEffect(
+    on(
+      () => props.agent.status,
+      () => {
+        if (!props.animate || mark === undefined || !canAnimate()) return;
+        mark.animate(
+          [
+            { opacity: 0, transform: "scale(0.6)" },
+            { opacity: 1, transform: "scale(1)" },
+          ],
+          { duration: 260, easing: "cubic-bezier(0.23, 1, 0.32, 1)" },
+        );
+      },
+      { defer: true },
+    ),
+  );
 
   return (
     <Tooltip value={tip()} placement="left">
-      <span class="bn-mark" data-status={props.agent.status} role="img" aria-label={tip()}>
+      <span
+        class="bn-mark"
+        ref={(element) => {
+          mark = element;
+        }}
+        data-status={props.agent.status}
+        role="img"
+        aria-label={tip()}
+      >
         <Switch>
           <Match when={props.agent.status === "running"}>
             <span class="bn-radar" />

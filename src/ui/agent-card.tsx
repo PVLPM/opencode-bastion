@@ -59,6 +59,8 @@ function Detail(props: { label: string; tone?: string; children: JSX.Element }) 
 
 export function AgentCard(props: AgentCardProps) {
   const [expanded, setExpanded] = createSignal(false);
+  // Details mount on the first expand and then stay, so closing can animate out.
+  const [revealed, setRevealed] = createSignal(false);
   const Icon = props.ui.Icon;
   const Tooltip = props.ui.Tooltip;
 
@@ -115,7 +117,7 @@ export function AgentCard(props: AgentCardProps) {
           <span class="bn-badge">{props.agent.agent}</span>
           <Show when={props.agent.title}>{(title) => <span class="bn-title">{title()}</span>}</Show>
           <span class="bn-card__mark">
-            <StatusMark agent={props.agent} ui={props.ui} />
+            <StatusMark agent={props.agent} animate={props.animate} ui={props.ui} />
           </span>
         </div>
 
@@ -183,73 +185,89 @@ export function AgentCard(props: AgentCardProps) {
               aria-expanded={expanded()}
               aria-controls={detailsID(props.agent.sessionID)}
               aria-label={`${expanded() ? "Hide" : "Show"} details for ${props.agent.agent}`}
-              onClick={() => setExpanded((value) => !value)}
+              onClick={() => {
+                setRevealed(true);
+                setExpanded((value) => !value);
+              }}
             >
               <Icon name="chevron-down" size="small" class="bn-more__chevron" />
             </button>
           </span>
         </div>
 
-        <Show when={expanded()}>
-          <dl class="bn-card__details bn-dl" id={detailsID(props.agent.sessionID)}>
-            <Show when={props.agent.title}>
-              {(title) => <Detail label="Session">{title()}</Detail>}
-            </Show>
-            <Show when={props.agent.task}>
-              {(task) => (
-                <Detail label="Task">
-                  <span class="bn-dl__task">{task()}</span>
-                </Detail>
-              )}
-            </Show>
-            <Show when={activity()}>
-              {(line) => (
-                <Detail label="Now" tone={props.agent.status}>
-                  {line()}
-                </Detail>
-              )}
-            </Show>
-            <Show when={props.agent.model}>
-              {(model) => (
-                <Detail label="Model">
-                  {model().name}
-                  <Show when={props.agent.effort}>{(effort) => ` ${effortLabel(effort())}`}</Show>
-                </Detail>
-              )}
-            </Show>
-            <Show when={props.agent.startedAt}>
-              {(started) => (
-                <Detail label="Time">
-                  {formatClock(started())}
-                  <Show when={props.agent.endedAt}>{(ended) => ` – ${formatClock(ended())}`}</Show>
-                  <Show when={elapsed()}>{(duration) => ` · ${duration()}`}</Show>
-                </Detail>
-              )}
-            </Show>
-            <Show when={props.agent.context}>
-              {(context) => (
-                <Show when={contextSummary(context())}>
-                  {(summary) => <Detail label="Context">{summary()}</Detail>}
+        <Show when={revealed()}>
+          <div
+            class="bn-reveal"
+            data-open={expanded() ? "true" : undefined}
+            inert={!expanded()}
+            aria-hidden={expanded() ? undefined : "true"}
+          >
+            <div class="bn-reveal__inner">
+              <dl class="bn-card__details bn-dl" id={detailsID(props.agent.sessionID)}>
+                <Show when={props.agent.title}>
+                  {(title) => <Detail label="Session">{title()}</Detail>}
                 </Show>
-              )}
-            </Show>
-            <Show when={props.agent.cost}>
-              {(cost) => (
-                <Detail label="Cost">
-                  {formatMoney(cost())}
-                  <Show when={cost().estimated}> · estimated at list price</Show>
-                </Detail>
-              )}
-            </Show>
-            <Show when={changed()}>
-              {(lines) => (
-                <Detail label="Lines">
-                  <span class="bn-lines__add">+{lines().added}</span>{" "}
-                  <span class="bn-lines__del">−{lines().removed}</span>
-                </Detail>
-              )}
-            </Show>
-          </dl>
+                <Show when={props.agent.task}>
+                  {(task) => (
+                    <Detail label="Task">
+                      <span class="bn-dl__task">{task()}</span>
+                    </Detail>
+                  )}
+                </Show>
+                <Show when={activity()}>
+                  {(line) => (
+                    <Detail label="Now" tone={props.agent.status}>
+                      {line()}
+                    </Detail>
+                  )}
+                </Show>
+                <Show when={props.agent.model}>
+                  {(model) => (
+                    <Detail label="Model">
+                      {model().name}
+                      <Show when={props.agent.effort}>
+                        {(effort) => ` ${effortLabel(effort())}`}
+                      </Show>
+                    </Detail>
+                  )}
+                </Show>
+                <Show when={props.agent.startedAt}>
+                  {(started) => (
+                    <Detail label="Time">
+                      {formatClock(started())}
+                      <Show when={props.agent.endedAt}>
+                        {(ended) => ` – ${formatClock(ended())}`}
+                      </Show>
+                      <Show when={elapsed()}>{(duration) => ` · ${duration()}`}</Show>
+                    </Detail>
+                  )}
+                </Show>
+                <Show when={props.agent.context}>
+                  {(context) => (
+                    <Show when={contextSummary(context())}>
+                      {(summary) => <Detail label="Context">{summary()}</Detail>}
+                    </Show>
+                  )}
+                </Show>
+                <Show when={props.agent.cost}>
+                  {(cost) => (
+                    <Detail label="Cost">
+                      {formatMoney(cost())}
+                      <Show when={cost().estimated}> · estimated at list price</Show>
+                    </Detail>
+                  )}
+                </Show>
+                <Show when={changed()}>
+                  {(lines) => (
+                    <Detail label="Lines">
+                      <span class="bn-lines__add">+{lines().added}</span>{" "}
+                      <span class="bn-lines__del">−{lines().removed}</span>
+                    </Detail>
+                  )}
+                </Show>
+              </dl>
+            </div>
+          </div>
         </Show>
       </div>
     </article>

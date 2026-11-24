@@ -7,3 +7,8 @@ export function reduceMotion(): boolean {
   if (document.documentElement.dataset.motion === "reduce") return true;
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 }
+
+/** Web Animations are missing in some test DOMs; motion is optional, so skip it there. */
+export function canAnimate(): boolean {
+  return "animate" in Element.prototype;
+}

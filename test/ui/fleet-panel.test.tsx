@@ -5,6 +5,7 @@ import type { Beam, FleetView } from "../../src/model/types";
 import type { FleetPanelProps } from "../../src/ui/fleet-panel";
 import { FleetPanel } from "../../src/ui/fleet-panel";
 import { TEST_NOW, runningChild, testFleet, testRoot, waitingChild } from "./fixtures";
+import { familyLanes, lanesView } from "./lane-fixtures";
 import { uiStub } from "./ui-stub";
 
 const disposers: (() => void)[] = [];
@@ -23,6 +24,7 @@ function mountPanel(
   document.body.append(host);
   const props: FleetPanelProps = {
     fleet: overrides.fleet,
+    lanes: overrides.lanes,
     onOpen: overrides.onOpen ?? (() => {}),
     canOpen: overrides.canOpen ?? (() => true),
     now: overrides.now ?? TEST_NOW,
@@ -84,7 +86,12 @@ describe("FleetPanel", () => {
     more?.click();
 
     expect(more?.getAttribute("aria-expanded")).toBe("false");
-    expect(host.querySelector("#bn-details-ses_child_a")).toBeNull();
+    // Kept mounted so it can animate closed, but out of reach and unannounced.
+    const reveal = host
+      .querySelector("#bn-details-ses_child_a")
+      ?.closest<HTMLElement>(".bn-reveal");
+    expect(reveal?.inert).toBe(true);
+    expect(reveal?.getAttribute("aria-hidden")).toBe("true");
   });
 
   it("disables a card whose session cannot be opened", () => {
@@ -234,5 +241,15 @@ describe("FleetPanel", () => {
     const host = mountPanel({ fleet: fleetWithFinished(), beams });
 
     expect(host.querySelector('[data-bn-beam="beam-in"]')).not.toBeNull();
+  });
+
+  it.each([
+    ["no lanes yet", undefined, false],
+    ["lanes without any execution", lanesView([]), false],
+    ["at least one execution", familyLanes(), true],
+  ] as const)("docks the lanes region below the cards only with %s", (_name, lanes, shown) => {
+    const host = mountPanel({ fleet: sampleFleet(), lanes });
+    const region = host.querySelector(".bn-cards + .bn-lanes");
+    expect(region !== null).toBe(shown);
   });
 });

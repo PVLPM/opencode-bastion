@@ -1,15 +1,18 @@
 import { For, Show, createMemo, createSignal } from "solid-js";
 
-import type { AgentView, Beam, FleetView } from "../model/types";
+import type { AgentView, Beam, FleetView, LanesView } from "../model/types";
 import type { Ui } from "@opencode/plugin/gui";
 import { AgentCard } from "./agent-card";
+import { AgentLanes } from "./agent-lanes";
 import { Connections } from "./connections";
+import { createFlip } from "./flip";
+import { createKeyed } from "./keyed";
 import { formatMoney } from "../model/format";
 import { reduceMotion } from "./motion";
-import { Timeline } from "./timeline";
 
 export interface FleetPanelProps {
   readonly fleet: FleetView | undefined;
+  readonly lanes: LanesView | undefined;
   readonly beams: readonly Beam[];
   readonly now: number;
   readonly onOpen: (sessionID: string) => void;
@@ -23,12 +26,15 @@ function count(agents: readonly AgentView[], status: AgentView["status"]): numbe
   return total;
 }
 
+const bySession = (agent: AgentView) => agent.sessionID;
+
 /**
- * The Agent Fleet side panel: the routed session's orchestrator, one level of
- * subagents under it, the finished ones below, and one shared timeline.
- * Read-only: every affordance either opens a session or reveals data.
+ * The Agent Fleet side panel: a fixed summary line, the orchestrator with one
+ * level of subagents under it (finished ones last) in their own scroll area,
+ * and the Agent Lanes region below. Read-only: every affordance either opens a
+ * session or reveals data.
  *
- * Lists are keyed by session id and the card reads its agent through a getter,
+ * Lists are keyed by session id and each card reads its agent through a getter,
  * so a fleet object rebuilt by the one-second clock updates cards in place
  * instead of recreating them and restarting their tickers.
  */
@@ -43,22 +49,20 @@ export function FleetPanel(props: FleetPanelProps) {
     if (fleet === undefined) return [];
     return [fleet.root, ...fleet.active, ...fleet.inactive];
   });
+  const all = createKeyed(agents, bySession);
+  const active = createKeyed(() => props.fleet?.active ?? [], bySession);
+  const inactive = createKeyed(() => props.fleet?.inactive ?? [], bySession);
+  const rowIDs = createMemo<readonly string[]>(() => [...active.ids(), ...inactive.ids()]);
 
-  const byID = createMemo<ReadonlyMap<string, AgentView>>(() => {
-    const map = new Map<string, AgentView>();
-    for (const agent of agents()) map.set(agent.sessionID, agent);
-    return map;
-  });
-
-  const ids = (list: readonly AgentView[] | undefined) =>
-    list === undefined ? [] : list.map((agent) => agent.sessionID);
-  const activeIDs = createMemo<readonly string[]>(() => ids(props.fleet?.active), [], {
-    equals: (a, b) => a.join("\u0000") === b.join("\u0000"),
-  });
-  const inactiveIDs = createMemo<readonly string[]>(() => ids(props.fleet?.inactive), [], {
-    equals: (a, b) => a.join("\u0000") === b.join("\u0000"),
-  });
-  const rowIDs = createMemo<readonly string[]>(() => [...activeIDs(), ...inactiveIDs()]);
+  // A card joining, or moving between Active and Finished, glides to its new place.
+  createFlip(
+    host,
+    () => `${active.ids().join(",")}|${inactive.ids().join(",")}`,
+    "[data-bn-card], .bn-group",
+    (element) =>
+      element.dataset.bnCard ?? (element.classList.contains("bn-group") ? "" : undefined),
+    animate,
+  );
 
   const running = () => count(agents(), "running");
   const waiting = () => count(agents(), "waiting");
@@ -71,13 +75,13 @@ export function FleetPanel(props: FleetPanelProps) {
     if (next instanceof HTMLElement) next.focus();
   };
 
-  const card = (id: string, root: boolean, inactive: boolean) => (
-    <Show when={byID().get(id)}>
+  const card = (id: string, root: boolean, finished: boolean) => (
+    <Show when={all.get(id)}>
       {(agent) => (
         <AgentCard
           agent={agent()}
           root={root}
-          inactive={inactive}
+          inactive={finished}
           now={props.now}
           openable={props.canOpen(id)}
           animate={animate}
@@ -122,31 +126,38 @@ export function FleetPanel(props: FleetPanelProps) {
               </Show>
             </header>
 
-            <div class="bn-tree" ref={setHost}>
-              {card(fleet().root.sessionID, true, false)}
-              <Show when={rowIDs().length > 0}>
-                <div class="bn-branch">
-                  <For each={activeIDs()}>{(id) => card(id, false, false)}</For>
-                  <Show when={inactiveIDs().length > 0}>
-                    <div
-                      class="bn-group"
-                      data-after-active={activeIDs().length > 0 ? "true" : undefined}
-                    >
-                      Finished
-                      <span class="bn-group__count">{inactiveIDs().length}</span>
-                    </div>
-                    <For each={inactiveIDs()}>{(id) => card(id, false, true)}</For>
-                  </Show>
-                </div>
-              </Show>
-              <Connections
-                host={host()}
-                sessionIDs={rowIDs()}
-                beams={props.beams}
-                animate={animate}
-              />
+            <div class="bn-cards">
+              <div class="bn-tree" ref={setHost}>
+                {card(fleet().root.sessionID, true, false)}
+                <Show when={rowIDs().length > 0}>
+                  <div class="bn-branch">
+                    <For each={active.ids()}>{(id) => card(id, false, false)}</For>
+                    <Show when={inactive.ids().length > 0}>
+                      <div
+                        class="bn-group"
+                        data-after-active={active.ids().length > 0 ? "true" : undefined}
+                      >
+                        Finished
+                        <span class="bn-group__count">{inactive.ids().length}</span>
+                      </div>
+                      <For each={inactive.ids()}>{(id) => card(id, false, true)}</For>
+                    </Show>
+                  </div>
+                </Show>
+                <Connections
+                  host={host()}
+                  sessionIDs={rowIDs()}
+                  beams={props.beams}
+                  animate={animate}
+                />
+              </div>
             </div>
-            <Timeline fleet={fleet()} now={props.now} />
+
+            <Show when={props.lanes?.from === undefined ? undefined : props.lanes}>
+              {(lanes) => (
+                <AgentLanes lanes={lanes()} now={props.now} animate={animate} ui={props.ui} />
+              )}
+            </Show>
           </>
         )}
       </Show>

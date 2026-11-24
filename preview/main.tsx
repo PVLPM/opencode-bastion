@@ -6,17 +6,21 @@ import "../src/ui/radar.css";
 import "../src/ui/styles.css";
 import "./preview.css";
 
-import type { Beam, FleetView } from "../src/model/types";
+import type { Beam, FleetView, LanesView } from "../src/model/types";
 import { FleetPanel } from "../src/ui/fleet-panel";
 import {
   failedFleet,
   inactiveFleet,
+  lanesFor,
   liveFleet,
+  liveLanes,
   longNamesFleet,
   now,
   parallelFleet,
   repeatedFleet,
   rootOnlyFleet,
+  sessionFleet,
+  sessionLanes,
   singleAgentFleet,
   statusesFleet,
   waitingFleet,
@@ -26,6 +30,7 @@ import { ui } from "./ui";
 interface FrameProps {
   readonly width: number;
   readonly fleet: FleetView | undefined;
+  readonly lanes: LanesView | undefined;
   readonly beams: readonly Beam[];
   readonly now: number;
   readonly closed: readonly string[];
@@ -45,6 +50,7 @@ function Frame(props: FrameProps) {
       <div class="pv-frame__body">
         <FleetPanel
           fleet={props.fleet}
+          lanes={props.lanes}
           beams={props.beams}
           now={props.now}
           onOpen={props.onOpen}
@@ -61,7 +67,15 @@ interface Scene {
   readonly title: string;
   readonly note: string;
   readonly fleet: () => FleetView | undefined;
+  /** Lanes for the scene; by default, the ones implied by its cards. */
+  readonly lanes?: () => LanesView;
   readonly closed: readonly string[];
+}
+
+function sceneLanes(scene: Scene): LanesView | undefined {
+  if (scene.lanes !== undefined) return scene.lanes();
+  const view = scene.fleet();
+  return view === undefined ? undefined : lanesFor(view);
 }
 
 const scenes: readonly Scene[] = [
@@ -98,6 +112,14 @@ const scenes: readonly Scene[] = [
     title: "Repeated agent names",
     note: "two Fixers and two Explorers stay separate cards; effort shows when known",
     fleet: repeatedFleet,
+    closed: [],
+  },
+  {
+    id: "session",
+    title: "Long session",
+    note: "fourteen minutes: six orchestrator turns with idle gaps, follow-ups after a gap, repeated names, a failure",
+    fleet: sessionFleet,
+    lanes: sessionLanes,
     closed: [],
   },
   {
@@ -143,6 +165,7 @@ function Panes(props: { scene: Scene; onOpen: (sessionID: string) => void }) {
       <Frame
         width={320}
         fleet={props.scene.fleet()}
+        lanes={sceneLanes(props.scene)}
         beams={[]}
         now={now}
         closed={props.scene.closed}
@@ -152,6 +175,7 @@ function Panes(props: { scene: Scene; onOpen: (sessionID: string) => void }) {
       <Frame
         width={560}
         fleet={props.scene.fleet()}
+        lanes={sceneLanes(props.scene)}
         beams={[]}
         now={now}
         closed={props.scene.closed}
@@ -163,7 +187,7 @@ function Panes(props: { scene: Scene; onOpen: (sessionID: string) => void }) {
 }
 
 function LivePanes(props: { onOpen: (sessionID: string) => void }) {
-  const startedAt = Date.now();
+  const [startedAt, setStartedAt] = createSignal(Date.now());
   const [step, setStep] = createSignal(0);
   const [nowValue, setNowValue] = createSignal(Date.now());
   const [beams, setBeams] = createSignal<readonly Beam[]>([]);
@@ -198,12 +222,16 @@ function LivePanes(props: { onOpen: (sessionID: string) => void }) {
     <section class="pv-row" id="live" data-preview="live">
       <header class="pv-row__head">
         <h2>Live activity</h2>
-        <p>activity lines slide up and beams run the wires while it works</p>
+        <p>
+          activity lines slide, beams run the wires, live lanes grow; at 4 s the Writer finishes, at
+          7 s a follow-up lands
+        </p>
       </header>
       <div class="pv-panes">
         <Frame
           width={320}
-          fleet={liveFleet(startedAt, step())}
+          fleet={liveFleet(startedAt(), step(), nowValue())}
+          lanes={liveLanes(startedAt(), nowValue())}
           beams={beams()}
           now={nowValue()}
           closed={[]}
@@ -212,7 +240,8 @@ function LivePanes(props: { onOpen: (sessionID: string) => void }) {
         />
         <Frame
           width={560}
-          fleet={liveFleet(startedAt, step())}
+          fleet={liveFleet(startedAt(), step(), nowValue())}
+          lanes={liveLanes(startedAt(), nowValue())}
           beams={beams()}
           now={nowValue()}
           closed={[]}
@@ -229,6 +258,17 @@ function LivePanes(props: { onOpen: (sessionID: string) => void }) {
         </button>
         <button class="pv-action" type="button" onClick={() => fire("in")}>
           ← Result
+        </button>
+        <button
+          class="pv-action"
+          type="button"
+          onClick={() => {
+            const at = Date.now();
+            setStartedAt(at);
+            setNowValue(at);
+          }}
+        >
+          Replay lanes
         </button>
       </div>
       <p class="pv-hint">

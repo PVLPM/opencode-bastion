@@ -1,4 +1,15 @@
-import type { AgentView, FleetView, LineStats, ModelLabel, Money } from "../src/model/types";
+import type {
+  AgentStatus,
+  AgentView,
+  FleetView,
+  Handoff,
+  Lane,
+  LaneBlock,
+  LanesView,
+  LineStats,
+  ModelLabel,
+  Money,
+} from "../src/model/types";
 
 const NOW = Date.now();
 
@@ -82,7 +93,7 @@ function rootAgent(init: Partial<AgentView> = {}): AgentView {
     model: model("Opus 5.5"),
     effort: "high",
     status: "running",
-    task: "Launch the new pricing page by Friday",
+    task: "Add the annual toggle and match the tiers to the new price sheet",
     activity: "Delegating to Researcher",
     startedAt: NOW - 51_000,
     cost: money(0.42),
@@ -99,9 +110,22 @@ const LIVE_ACTIVITIES = [
   "Thinking…",
 ];
 
-export function liveFleet(startedAt: number, step: number): FleetView {
+/**
+ * The live scene's cards, in step with `liveLanes`: the Writer finishes and is
+ * followed up, and the orchestrator is idle between the turns its lane shows.
+ */
+export function liveFleet(startedAt: number, step: number, now: number): FleetView {
   const activity = LIVE_ACTIVITIES[step % LIVE_ACTIVITIES.length] ?? "Thinking…";
   const nextActivity = LIVE_ACTIVITIES[(step + 1) % LIVE_ACTIVITIES.length] ?? "Thinking…";
+  const elapsed = (now - startedAt) / 1000;
+  const rootIdleSince =
+    elapsed < LIVE_ROOT_WAKES
+      ? -29
+      : elapsed >= 9.5 && elapsed < LIVE_ROOT_RESUMES
+        ? 9.5
+        : undefined;
+  const writerDone = elapsed >= LIVE_WRITER_DONE && elapsed < LIVE_FOLLOWUP_STARTS;
+  const followedUp = elapsed >= LIVE_FOLLOWUP_STARTS;
   return fleet(
     agent({
       sessionID: "ses_live_root",
@@ -109,10 +133,11 @@ export function liveFleet(startedAt: number, step: number): FleetView {
       title: "Launch the new pricing page",
       model: model("Opus 5.5"),
       effort: "high",
-      status: "running",
-      task: "Launch the new pricing page by Friday",
-      activity: step % 2 === 0 ? "Delegating to Writer" : "Reviewing the diff",
+      status: rootIdleSince === undefined ? "running" : "done",
+      task: "Add the annual toggle and match the tiers to the new price sheet",
+      activity: rootIdleSince === undefined ? "Delegating to Writer" : undefined,
       startedAt: startedAt - 72_000,
+      endedAt: rootIdleSince === undefined ? undefined : startedAt + rootIdleSince * 1000,
       cost: money(0.42),
       context: { used: 62_400, limit: 200_000 },
       lines: lines(18, 4),
@@ -137,10 +162,13 @@ export function liveFleet(startedAt: number, step: number): FleetView {
         title: "Write the plan copy",
         model: model("GPT-6.2 Sol", "openai", "gpt-6.2-sol"),
         effort: "medium",
-        status: "running",
-        activity: nextActivity,
-        task: "Write the plan copy for the three pricing tiers",
+        status: writerDone ? "done" : "running",
+        activity: writerDone ? undefined : nextActivity,
+        task: followedUp
+          ? "Shorten the enterprise tier"
+          : "Write the plan copy for the three pricing tiers",
         startedAt: startedAt - 38_000,
+        endedAt: writerDone ? startedAt + LIVE_WRITER_DONE * 1000 : undefined,
         cost: money(0.18),
         context: { used: 31_800, limit: 128_000 },
         lines: lines(26, 9),
@@ -607,4 +635,376 @@ export function inactiveFleet(): FleetView {
       lines: lines(0, 3),
     }),
   ]);
+}
+
+// Lanes ----------------------------------------------------------------------
+
+type BlockSpec = readonly [
+  start: number,
+  end: number | undefined,
+  status: AgentStatus,
+  label?: string,
+];
+
+interface LaneSpec {
+  readonly sessionID: string;
+  readonly agent: string;
+  readonly title?: string;
+  readonly root?: boolean;
+  /** Seconds relative to `base`; an absent end is a live execution. */
+  readonly blocks: readonly BlockSpec[];
+}
+
+/** A call issued at `at` seconds; `block` is the index of the child block it fed. */
+interface HandoffSpec {
+  readonly childID: string;
+  readonly at: number;
+  readonly block: number | undefined;
+}
+
+function buildLanes(
+  base: number,
+  specs: readonly LaneSpec[],
+  calls: readonly HandoffSpec[],
+): LanesView {
+  const lanes: Lane[] = specs.map((spec) => ({
+    sessionID: spec.sessionID,
+    agent: spec.agent,
+    title: spec.title,
+    root: spec.root ?? false,
+    blocks: spec.blocks.map(
+      ([start, end, status, label], index): LaneBlock => ({
+        id: `${spec.sessionID}:${index}`,
+        start: base + start * 1000,
+        end: end === undefined ? undefined : base + end * 1000,
+        status,
+        label,
+      }),
+    ),
+  }));
+  const seen = new Set<string>();
+  const handoffs = calls.map((call, index): Handoff => {
+    const kind = seen.has(call.childID) ? "followup" : "delegate";
+    seen.add(call.childID);
+    return {
+      id: `call_${index}`,
+      childID: call.childID,
+      at: base + call.at * 1000,
+      blockID: call.block === undefined ? undefined : `${call.childID}:${call.block}`,
+      kind,
+    };
+  });
+  let from: number | undefined;
+  for (const lane of lanes) {
+    for (const block of lane.blocks) from = Math.min(from ?? block.start, block.start);
+  }
+  return { lanes, handoffs, from };
+}
+
+const blockStatus = (agent: AgentView): AgentStatus =>
+  agent.endedAt === undefined && agent.status !== "running" && agent.status !== "waiting"
+    ? "unknown"
+    : agent.status;
+
+/**
+ * Lanes implied by a fleet's cards: one execution per subagent, and orchestrator
+ * turns that issue each call and read each result, with idle gaps in between.
+ */
+export function lanesFor(view: FleetView): LanesView {
+  const root = view.root;
+  const children = [...view.active, ...view.inactive]
+    .filter((child) => child.startedAt !== undefined)
+    .toSorted((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
+  const seconds = (time: number) => (time - NOW) / 1000;
+  const turns: [number, number][] = [];
+  const addTurn = (start: number, end: number) => {
+    const last = turns.at(-1);
+    if (last !== undefined && start <= last[1] + 2) last[1] = Math.max(last[1], end);
+    else turns.push([start, end]);
+  };
+  const moments = [
+    ...children.map((child) => [seconds(child.startedAt ?? NOW) - 4, 5] as const),
+    ...children.flatMap((child) =>
+      child.endedAt === undefined ? [] : [[seconds(child.endedAt) + 1, 7] as const],
+    ),
+  ].toSorted((a, b) => a[0] - b[0]);
+  const rootStart = root.startedAt === undefined ? undefined : seconds(root.startedAt);
+  if (rootStart !== undefined) addTurn(rootStart, rootStart + 6);
+  for (const [start, length] of moments) addTurn(start, start + length);
+  const rootBlocks: BlockSpec[] = turns.map(([start, end], index) => [
+    start,
+    end,
+    "done",
+    index === 0 ? root.task : "Reading a result",
+  ]);
+  const last = rootBlocks.at(-1);
+  if ((root.status === "running" || root.status === "waiting") && last !== undefined) {
+    rootBlocks[rootBlocks.length - 1] = [last[0], undefined, root.status, last[3]];
+  }
+  return buildLanes(
+    NOW,
+    [
+      {
+        sessionID: root.sessionID,
+        agent: root.agent,
+        title: root.title,
+        root: true,
+        blocks: rootBlocks,
+      },
+      ...children.map((child) => ({
+        sessionID: child.sessionID,
+        agent: child.agent,
+        title: child.title,
+        blocks: [
+          [
+            seconds(child.startedAt ?? NOW),
+            child.endedAt === undefined ? undefined : seconds(child.endedAt),
+            blockStatus(child),
+            child.task,
+          ] as const,
+        ],
+      })),
+    ],
+    children.map((child) => ({
+      childID: child.sessionID,
+      at: seconds(child.startedAt ?? NOW) - 1,
+      block: 0,
+    })),
+  );
+}
+
+/**
+ * A fourteen-minute session: the orchestrator works in six separate turns, two
+ * Explorers and two Fixers run side by side, both Fixers get a follow-up after
+ * an idle gap, a deploy fails and a review waits for you.
+ */
+const SESSION_LANES: readonly LaneSpec[] = [
+  {
+    sessionID: "ses_long_root",
+    agent: "Orchestrator",
+    title: "Stabilise session recovery",
+    root: true,
+    blocks: [
+      [-840, -790, "done", "Stabilise session recovery before 1.1"],
+      [-702, -664, "done", "Explorer: retry policies mapped"],
+      [-524, -505, "done", "Fixer: recovery fixed"],
+      [-334, -300, "done", "Fixer: reconnect test stable"],
+      [-152, -128, "done", "Deployer failed: rate limit"],
+      [-44, undefined, "running", "Also check the offline banner"],
+    ],
+  },
+  {
+    sessionID: "ses_long_explore_a",
+    agent: "Explorer",
+    title: "Where is the retry policy",
+    blocks: [[-811, -720, "done", "Find every retry policy in the client"]],
+  },
+  {
+    sessionID: "ses_long_explore_b",
+    agent: "Explorer",
+    title: "Recovery call sites",
+    blocks: [[-805, -705, "done", "List the call sites of recoverSession"]],
+  },
+  {
+    sessionID: "ses_long_fixer_a",
+    agent: "Fixer",
+    title: "Session recovery",
+    blocks: [
+      [-689, -530, "done", "Fix recovery regressions"],
+      [-511, -420, "done", "Also cover the cold-start path"],
+    ],
+  },
+  {
+    sessionID: "ses_long_fixer_b",
+    agent: "Fixer",
+    title: "Flaky reconnect test",
+    blocks: [
+      [-675, -340, "done", "Stabilise the reconnect test"],
+      [-29, undefined, "running", "Check the offline banner copy"],
+    ],
+  },
+  {
+    sessionID: "ses_long_deploy",
+    agent: "Deployer",
+    title: "Publish the preview",
+    blocks: [[-317, -160, "failed", "Publish the preview build"]],
+  },
+  {
+    sessionID: "ses_long_review",
+    agent: "Reviewer",
+    title: "Review the recovery diff",
+    blocks: [[-139, undefined, "waiting", "Review the recovery diff"]],
+  },
+];
+
+const SESSION_CALLS: readonly HandoffSpec[] = [
+  { childID: "ses_long_explore_a", at: -812, block: 0 },
+  { childID: "ses_long_explore_b", at: -806, block: 0 },
+  { childID: "ses_long_fixer_a", at: -690, block: 0 },
+  { childID: "ses_long_fixer_b", at: -676, block: 0 },
+  { childID: "ses_long_fixer_a", at: -512, block: 1 },
+  { childID: "ses_long_deploy", at: -318, block: 0 },
+  { childID: "ses_long_review", at: -140, block: 0 },
+  { childID: "ses_long_fixer_b", at: -30, block: 1 },
+];
+
+export function sessionLanes(): LanesView {
+  return buildLanes(NOW, SESSION_LANES, SESSION_CALLS);
+}
+
+export function sessionFleet(): FleetView {
+  const at = (seconds: number) => NOW + seconds * 1000;
+  return fleet(
+    rootAgent({
+      sessionID: "ses_long_root",
+      title: "Stabilise session recovery",
+      task: "Also check the offline banner",
+      activity: "Delegating to Fixer",
+      startedAt: at(-840),
+      cost: money(1.18),
+    }),
+    [
+      agent({
+        sessionID: "ses_long_fixer_b",
+        agent: "Fixer",
+        title: "Flaky reconnect test",
+        model: model("GPT-6.2 Sol", "openai", "gpt-6.2-sol"),
+        effort: "low",
+        task: "Check the offline banner copy",
+        activity: "Reading offline-banner.tsx",
+        startedAt: at(-675),
+        cost: money(0.36),
+        context: { used: 120_000, limit: 400_000 },
+      }),
+      agent({
+        sessionID: "ses_long_review",
+        agent: "Reviewer",
+        title: "Review the recovery diff",
+        model: model("Opus 5.5"),
+        status: "waiting",
+        statusDetail: "Waiting for your answer",
+        task: "Review the recovery diff",
+        startedAt: at(-139),
+        cost: money(0.11),
+      }),
+      agent({
+        sessionID: "ses_long_deploy",
+        agent: "Deployer",
+        title: "Publish the preview",
+        model: model("Gemini 3 Pro", "google", "gemini-3-pro"),
+        status: "failed",
+        errorKind: "rate limit",
+        task: "Publish the preview build",
+        startedAt: at(-317),
+        endedAt: at(-160),
+        cost: money(0.05),
+      }),
+      agent({
+        sessionID: "ses_long_fixer_a",
+        agent: "Fixer",
+        title: "Session recovery",
+        model: model("GPT-6.2 Sol", "openai", "gpt-6.2-sol"),
+        effort: "medium",
+        status: "done",
+        task: "Also cover the cold-start path",
+        startedAt: at(-689),
+        endedAt: at(-420),
+        cost: money(0.41),
+        lines: lines(48, 12),
+      }),
+      agent({
+        sessionID: "ses_long_explore_b",
+        agent: "Explorer",
+        title: "Recovery call sites",
+        model: model("Sonnet 5.5"),
+        status: "done",
+        task: "List the call sites of recoverSession",
+        startedAt: at(-805),
+        endedAt: at(-705),
+        cost: money(0.02),
+      }),
+      agent({
+        sessionID: "ses_long_explore_a",
+        agent: "Explorer",
+        title: "Where is the retry policy",
+        model: model("Sonnet 5.5"),
+        status: "done",
+        task: "Find every retry policy in the client",
+        startedAt: at(-811),
+        endedAt: at(-720),
+        cost: money(0.03),
+      }),
+    ],
+  );
+}
+
+/** Seconds after the live scene starts when the Writer finishes and is followed up. */
+const LIVE_WRITER_DONE = 4;
+const LIVE_FOLLOWUP = 7;
+const LIVE_FOLLOWUP_STARTS = 7.5;
+const LIVE_ROOT_WAKES = LIVE_WRITER_DONE + 0.5;
+const LIVE_ROOT_RESUMES = 15;
+
+/**
+ * The live scene's lanes: everything live grows toward now; the Writer closes,
+ * the orchestrator wakes to read it, sends a follow-up and goes idle again.
+ */
+export function liveLanes(startedAt: number, now: number): LanesView {
+  const elapsed = (now - startedAt) / 1000;
+  /** The end of an execution that closes at `until`, absent while it still runs. */
+  const live = (until: number): number | undefined => (elapsed < until ? undefined : until);
+  const root: BlockSpec[] = [
+    [-72, -50, "done", "Add the annual toggle and match the tiers to the new price sheet"],
+    [-46, -29, "done", "Researcher: competitors compared"],
+  ];
+  if (elapsed >= LIVE_ROOT_WAKES) {
+    root.push([
+      LIVE_ROOT_WAKES,
+      live(9.5),
+      elapsed < 9.5 ? "running" : "done",
+      "Writer: plan copy drafted",
+    ]);
+  }
+  if (elapsed >= LIVE_ROOT_RESUMES)
+    root.push([LIVE_ROOT_RESUMES, undefined, "running", "Tighten the hero too"]);
+  const writer: BlockSpec[] = [
+    [
+      -37.5,
+      live(LIVE_WRITER_DONE),
+      elapsed < LIVE_WRITER_DONE ? "running" : "done",
+      "Write the plan copy for the three pricing tiers",
+    ],
+  ];
+  if (elapsed >= LIVE_FOLLOWUP_STARTS)
+    writer.push([LIVE_FOLLOWUP_STARTS, undefined, "running", "Shorten the enterprise tier"]);
+  const calls: HandoffSpec[] = [
+    { childID: "ses_live_research", at: -44, block: 0 },
+    { childID: "ses_live_writer", at: -38, block: 0 },
+    { childID: "ses_live_verify", at: -31, block: 0 },
+  ];
+  if (elapsed >= LIVE_FOLLOWUP) {
+    calls.push({
+      childID: "ses_live_writer",
+      at: LIVE_FOLLOWUP,
+      block: elapsed >= LIVE_FOLLOWUP_STARTS ? 1 : undefined,
+    });
+  }
+  return buildLanes(
+    startedAt,
+    [
+      { sessionID: "ses_live_root", agent: "Orchestrator", root: true, blocks: root },
+      {
+        sessionID: "ses_live_research",
+        agent: "Researcher",
+        blocks: [[-43.5, undefined, "running", "Compare five competitors"]],
+      },
+      { sessionID: "ses_live_writer", agent: "Writer", blocks: writer },
+      {
+        sessionID: "ses_live_verify",
+        agent: "Verifier",
+        blocks: [[-30.5, undefined, "waiting", "Check the checkout flow end to end"]],
+      },
+    ],
+    calls,
+  );
 }
