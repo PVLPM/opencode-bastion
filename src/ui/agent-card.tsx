@@ -48,7 +48,7 @@ function activityLine(agent: AgentView): string | undefined {
 }
 
 function effortLabel(effort: string): string {
-  return `#${effort.charAt(0).toUpperCase()}${effort.slice(1)}`;
+  return `${effort.charAt(0).toUpperCase()}${effort.slice(1)}`;
 }
 
 function detailsID(sessionID: string): string {

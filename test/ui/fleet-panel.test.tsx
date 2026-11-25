@@ -427,7 +427,7 @@ describe("FleetPanel", () => {
     expect(rows[0]?.querySelector(".bn-title")?.textContent).toBe("Fix the failing test");
     expect(rows[1]?.textContent).toBe("Fix recovery regressions•Running tests…");
     expect(rows[2]?.querySelector(".bn-model__name")?.textContent).toBe("Opus 5.5");
-    expect(rows[2]?.querySelector(".bn-model__effort")?.textContent).toBe("#Medium");
+    expect(rows[2]?.querySelector(".bn-model__effort")?.textContent).toBe("Medium");
     expect(rows[2]?.querySelector(".bn-lines")?.textContent).toBe("+12−3");
   });
 
