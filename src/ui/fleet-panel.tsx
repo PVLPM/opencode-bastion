@@ -9,7 +9,7 @@ import { Connections } from "./connections";
 import { createFlip } from "./flip";
 import { createKeyed } from "./keyed";
 import { reduceMotion } from "./motion";
-import { RollingMoney } from "./rolling-money";
+import { RollingMoney, RollingText } from "./rolling-money";
 
 export interface FleetPanelProps {
   readonly fleet: FleetView | undefined;
@@ -132,7 +132,7 @@ export function FleetPanel(props: FleetPanelProps) {
                       class="bn-head__tokens"
                       title="Known family token total for loaded sessions"
                     >
-                      {tokens()}
+                      <RollingText text={tokens()} />
                     </span>
                   )}
                 </Show>

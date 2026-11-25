@@ -6,7 +6,7 @@ import { reduceMotion } from "./motion";
 
 const DIGIT = /^[0-9]$/;
 
-function MoneyCell(props: { character: string }) {
+function RollCell(props: { character: string }) {
   const character = createMemo(() => props.character);
   const [roll, setRoll] = createSignal<{ from: string; to: string }>();
   const numeric = () => DIGIT.test(character());
@@ -44,25 +44,30 @@ function MoneyCell(props: { character: string }) {
   );
 }
 
-export function RollingMoney(props: { value: Money }) {
-  const formatted = createMemo(() => formatMoney(props.value));
-  // Align cells from the cents end so adding `~`, `<`, or another dollar digit
-  // leaves all the unchanged positions mounted.
-  const length = createMemo(() => formatted().length);
+/**
+ * A formatted value whose digits roll in place when it changes. Cells are
+ * aligned from the end so a suffix or a new leading digit leaves unchanged
+ * positions mounted.
+ */
+export function RollingText(props: { text: string }) {
+  const length = createMemo(() => props.text.length);
   const positions = createMemo(() =>
     Array.from({ length: length() }, (_, index) => length() - index),
   );
 
   return (
     <span class="bn-money">
-      <span class="bn-money__text">{formatted()}</span>
+      <span class="bn-money__text">{props.text}</span>
       <span class="bn-money__visual" aria-hidden="true">
         <For each={positions()}>
-          {(position) => (
-            <MoneyCell character={formatted().charAt(formatted().length - position)} />
-          )}
+          {(position) => <RollCell character={props.text.charAt(props.text.length - position)} />}
         </For>
       </span>
     </span>
   );
+}
+
+export function RollingMoney(props: { value: Money }) {
+  const formatted = createMemo(() => formatMoney(props.value));
+  return <RollingText text={formatted()} />;
 }

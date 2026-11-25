@@ -11,7 +11,7 @@ import {
   formatTokens,
 } from "../model/format";
 import { ProviderLogo } from "./provider-logo";
-import { RollingMoney } from "./rolling-money";
+import { RollingMoney, RollingText } from "./rolling-money";
 import { StatusMark } from "./status-mark";
 import { statusLabel } from "./status";
 import { ActivityTicker } from "./ticker";
@@ -184,7 +184,9 @@ export function AgentCard(props: AgentCardProps) {
             <Show when={props.agent.tokens}>
               {(tokens) => (
                 <Tooltip value="Total tokens this session has consumed, including reasoning and cache reads and writes">
-                  <span class="bn-metrics__tip">{formatTokenMetric(tokens().total)}</span>
+                  <span class="bn-metrics__tip">
+                    <RollingText text={formatTokenMetric(tokens().total)} />
+                  </span>
                 </Tooltip>
               )}
             </Show>

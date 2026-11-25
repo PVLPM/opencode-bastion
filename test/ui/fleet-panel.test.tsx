@@ -231,11 +231,23 @@ describe("FleetPanel", () => {
     const metric = host.querySelector(
       '[data-tooltip="Total tokens this session has consumed, including reasoning and cache reads and writes"]',
     );
-    expect(metric?.textContent).toBe("12.8k tok");
-    expect(host.querySelector(".bn-head__tokens")?.textContent).toBe("12.8k tok");
+    expect(metric?.querySelector(".bn-money__text")?.textContent).toBe("12.8k tok");
+    expect(host.querySelector(".bn-head__tokens .bn-money__text")?.textContent).toBe("12.8k tok");
     expect(host.querySelector(".bn-head__tokens")?.getAttribute("title")).toBe(
       "Known family token total for loaded sessions",
     );
+  });
+
+  it("rolls a changed token digit in the card and the header", () => {
+    const initial = testFleet(testRoot({ tokens: usage({ total: 12_800 }) }), [], 12_800);
+    const [fleet, setFleet] = createSignal(initial);
+    const host = mountPanel({ readFleet: fleet });
+    const reels = () =>
+      [...host.querySelectorAll(".bn-money__reel")].map((reel) => reel.textContent);
+
+    expect(reels()).toHaveLength(0);
+    setFleet(testFleet(testRoot({ tokens: usage({ total: 12_900 }) }), [], 12_900));
+    expect(reels()).toEqual(["89", "89"]);
   });
 
   it("shows a measured zero token total", () => {
@@ -243,7 +255,7 @@ describe("FleetPanel", () => {
     const host = mountPanel({ fleet });
 
     expect(host.querySelector(".bn-row--meta")?.textContent).toContain("0 tok");
-    expect(host.querySelector(".bn-head__tokens")?.textContent).toBe("0 tok");
+    expect(host.querySelector(".bn-head__tokens .bn-money__text")?.textContent).toBe("0 tok");
   });
 
   it("lists cumulative usage in the details and keeps the cost", () => {
