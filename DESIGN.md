@@ -63,22 +63,29 @@ A card is three fixed-height rows (20px, 18px, 20px) with a 1px gap, 8px radius
 and `6px 6px 5px 8px` padding. The whole card body is one open button; the
 status mark and the disclosure sit above it so their tooltips and clicks work.
 
-1. **Identity** — `[agent badge] Session title ……… [status mark]`.
+1. **Identity** — `[agent badge] Session title ……… Duration [status mark]`.
    The badge is capitalized agent text in an 18px-tall, 5px-radius chip
    (`--bn-layer-2`, inset 0.5px `--bn-border-strong`, 11px), capped at 62% width
    and ellipsized. Below 300px of card content width the badge is capped at 48%.
    The title is the stored session title with the native ` (@agent subagent)`
-   suffix removed, so follow-ups do not rename the card. The status mark is 16×16
-   and right-aligned.
-2. **Work** — `Task • Activity`.
+   suffix removed, so follow-ups do not rename the card. The duration uses the
+   shared duration format with tabular numerals and sits immediately before the
+   mark in the same trailing cluster, so it stays right-aligned while the title
+   truncates naturally. It never leaves the row at narrow widths. The status mark
+   is 16×16 and right-aligned.
+2. **Work** — `Task • Activity ……… +added −removed`.
    The task is the newest delegation description for a subagent, or the first
    line of its latest user prompt for the orchestrator; never the session title.
    The orchestrator prompt is the native display text with native mention spans
    removed when they still match. The details carry the full task text. The
    activity is the live, concise tool description. The `•` separator only appears
-   when both exist. The task is capped at 50%; the ticker takes the rest and
-   clips.
-3. **Meta** — `[logo] Model Effort ……… lines duration tokens cost context-ring chevron`.
+   when both exist, so a task followed by a diff but no activity never draws one.
+   The task is capped at 50%; the ticker takes the rest and clips, so current
+   activity keeps priority over task text. The session's cumulative net
+   `+added −removed` counters sit at the trailing edge after the ticker with the
+   existing success/danger tones, tooltip and accessible name; they leave the
+   row only at ≤300px (see Narrow width).
+3. **Meta** — `[logo] Model Effort ……… tokens cost context-ring chevron`.
    The provider mark sits in a 14px optical box, 4px from the model name; a
    provider with no vendored mark shows no logo. The model name uses the base
    text color and the effort the panel's faint tone, so the variant reads as
@@ -88,7 +95,9 @@ status mark and the disclosure sit above it so their tooltips and clicks work.
    tabular numbers. The token metric is the cumulative session total,
    including reasoning and cache reads and writes; the chevron is a 24×24
    disclosure button that rotates 180° when open. At wide card widths a 14px slot
-   is reserved for the context ring even when the ring is absent.
+   is reserved for the context ring even when the ring is absent. Duration lives
+   in row 1 and the line counts in row 2, so this row carries only the usage
+   metrics and the disclosure.
 
 The disclosure reveals a definition list (72px label column) in three groups:
 Agent, Session, Task and Now; then Provider, Model, Cost, Time and Changes; then
@@ -448,21 +457,21 @@ Layout is unchanged. Reduced motion is not a different layout.
 
 ## Narrow width and overflow
 
-The card is a container (`container: bn-card / inline-size`); its third row
-gives way in this order:
+The card is a container (`container: bn-card / inline-size`); row 1 keeps its
+duration and status mark, and row 3 gives way in this order:
 
 1. At ≤330px: hide the cost (it remains in the details).
-2. At ≤300px: hide the `+added −removed` counts (they remain in the details),
-   tighten the 10px row gap and 8px metric gap to 6px, and shrink the effort
-   label to a 3ch minimum.
+2. At ≤300px: hide the `+added −removed` counts from row 2 (they remain in the
+   details), tighten the third row's 10px gap and 8px metric gap to 6px, and
+   shrink the effort label to a 3ch minimum.
 3. Only then does the model name ellipsize.
 4. At ≤280px: hide the context ring (its value is still in the details and the
    tooltip).
 
-Duration never drops; after the cost, line counts and ring have given way, the
-model name ellipsizes. The agent badge is capped at 62% (48% below 300px) and the
-title ellipsizes; the task is capped at 50%. The panel's vertical rhythm never
-depends on text length: every row is a fixed height.
+The duration never drops from row 1; after the cost, diff counts and ring have
+given way, the model name ellipsizes. The agent badge is capped at 62% (48% below
+300px) and the title ellipsizes; the task is capped at 50%. The panel's vertical
+rhythm never depends on text length: every row is a fixed height.
 
 The header is its own container (`container: bn-head / inline-size`). At ≤330px
 its running count leaves first, because the cards already carry the status mark

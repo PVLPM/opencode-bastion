@@ -52,8 +52,8 @@ Preview limitations:
 - **Themes**: dark is the primary acceptance theme for this project. Light must
   still be checked for legibility, fallbacks and any token that is missing from
   the preview stand-ins.
-- **Widths**: 320px and 560px. 320px exposes the third-row drop order; 560px
-  shows the intended spacing.
+- **Widths**: 320px and 560px. 320px exposes the narrow drop order; 560px shows
+  the intended spacing.
 - **Motion**: full motion and `?motion=reduce`. Layout must be identical; only
   movement disappears.
 - **States**: running, waiting, failed, done, unknown; a fresh child; a missing
@@ -67,18 +67,21 @@ Cards:
       grows the card.
 - [ ] The status mark matches the status, sits on the right, and its tooltip and
       accessible name say the same thing.
-- [ ] The `•` separator appears only when both task and activity exist. A running
-      card always has an activity; a finished part never keeps its old label and
-      the gap is `Working…`.
+- [ ] The `•` separator appears only when both task and activity exist, even
+      when the diff counters trail row 2. A running card always has an activity;
+      a finished part never keeps its old label and the gap is `Working…`.
 - [ ] Live cards are raised; finished cards are sunken with a hairline; the routed
       card has its inset ring; hover and press do not move the layout.
-- [ ] The metrics order is lines, duration, total tokens, cost, context ring,
-      chevron; `+added −removed` and cost are hidden only where the details still
-      carry them.
-- [ ] At ≤330px the cost goes, at ≤300px the line counts go and the gap tightens
-      while effort shrinks, and at ≤280px the ring goes. Duration remains. Below
-      300px the badge is capped at 48%; the details always carry the full Agent
-      row.
+- [ ] Row 1 ends with the duration immediately before the status mark; row 2 is
+      task • activity with `+added −removed` at its trailing edge; row 3's
+      metrics are total tokens, cost, context ring, chevron. The diff counts and
+      cost are hidden only where the details still carry them.
+- [ ] The task takes at most half of row 2 and the activity ticker takes the
+      rest.
+- [ ] At ≤330px the cost goes, at ≤300px the diff counts go and the third-row
+      gap tightens while effort shrinks, and at ≤280px the ring goes. The
+      duration stays in row 1. Below 300px the badge is capped at 48%; the
+      details always carry the full Agent row.
 - [ ] Details carry the full task, Provider (logo and display name), the
       cumulative token rows and a Changes row with the distinct file count.
 - [ ] A truncated diff is labelled partial in the collapsed line count and the

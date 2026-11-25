@@ -153,8 +153,14 @@ export function AgentCard(props: AgentCardProps) {
         <div class="bn-row bn-row--head">
           <span class="bn-badge">{props.agent.agent}</span>
           <Show when={props.agent.title}>{(title) => <span class="bn-title">{title()}</span>}</Show>
-          <span class="bn-card__mark">
-            <StatusMark agent={props.agent} animate={props.animate} ui={props.ui} />
+          {/* The duration and mark stay together at the trailing edge while the title truncates. */}
+          <span class="bn-card__end">
+            <Show when={elapsed()}>
+              {(duration) => <span class="bn-duration">{duration()}</span>}
+            </Show>
+            <span class="bn-card__mark">
+              <StatusMark agent={props.agent} animate={props.animate} ui={props.ui} />
+            </span>
           </span>
         </div>
 
@@ -166,6 +172,18 @@ export function AgentCard(props: AgentCardProps) {
             </span>
           </Show>
           <ActivityTicker text={activity()} animate={props.animate} />
+          <Show when={rowChanges()}>
+            {(lines) => (
+              <span class="bn-work__diff">
+                <Tooltip value={diffTooltip(lines().truncated)}>
+                  <span class="bn-lines" role="img" aria-label={linesLabel(lines())}>
+                    <span class="bn-lines__add">+{lines().added}</span>
+                    <span class="bn-lines__del">−{lines().removed}</span>
+                  </span>
+                </Tooltip>
+              </span>
+            )}
+          </Show>
         </div>
 
         <div class="bn-row bn-row--meta">
@@ -181,19 +199,6 @@ export function AgentCard(props: AgentCardProps) {
             )}
           </Show>
           <span class="bn-metrics">
-            <Show when={rowChanges()}>
-              {(lines) => (
-                <span class="bn-metrics__tip bn-metrics__lines">
-                  <Tooltip value={diffTooltip(lines().truncated)}>
-                    <span class="bn-lines" role="img" aria-label={linesLabel(lines())}>
-                      <span class="bn-lines__add">+{lines().added}</span>
-                      <span class="bn-lines__del">−{lines().removed}</span>
-                    </span>
-                  </Tooltip>
-                </span>
-              )}
-            </Show>
-            <Show when={elapsed()}>{(duration) => <span>{duration()}</span>}</Show>
             <Show when={props.agent.tokens}>
               {(tokens) => (
                 <Tooltip value="Total tokens this session has consumed, including reasoning and cache reads and writes">

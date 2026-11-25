@@ -377,7 +377,7 @@
   white-space: nowrap;
 }
 
-/* Row 1: agent badge, session title, status mark. */
+/* Row 1: agent badge, session title, duration, status mark. */
 .bn-row--head {
   gap: 6px;
 }
@@ -407,12 +407,26 @@
   text-overflow: ellipsis;
 }
 
+.bn-card__end {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin-inline: auto 3px;
+}
+
+.bn-duration {
+  flex: none;
+  color: var(--bn-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .bn-card__mark {
   position: relative;
   z-index: 2;
   display: flex;
   flex: none;
-  margin-inline: auto 3px;
 }
 
 .bn-mark {
@@ -447,7 +461,7 @@
   color: var(--bn-icon-muted);
 }
 
-/* Row 2: task • activity. */
+/* Row 2: task • activity; the session diff trails at the right edge. */
 .bn-row--work {
   height: 18px;
   gap: 5px;
@@ -653,6 +667,14 @@
   }
 }
 
+.bn-work__diff {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  flex: none;
+  margin-inline-start: auto;
+}
+
 .bn-lines {
   display: inline-flex;
   gap: 4px;
@@ -686,10 +708,10 @@
 }
 
 /*
- * Narrow priority for row 3: at ≤330px the cost leaves the collapsed row (it
- * remains in the details); at ≤300px the +/- counts leave, the gaps tighten and
- * the effort shrinks; at ≤280px the ring leaves. Duration never drops; then the
- * model name ellipsizes.
+ * Narrow priority: at ≤330px the cost leaves row 3 (it remains in the details);
+ * at ≤300px the diff counts leave row 2 (also in the details), the gaps tighten
+ * and the effort shrinks; at ≤280px the ring leaves. The duration stays in row 1
+ * and never drops; then the model name ellipsizes.
  */
 @container bn-card (max-width: 330px) {
   .bn-metrics__cost {
@@ -706,7 +728,7 @@
     display: contents;
   }
 
-  .bn-metrics__lines {
+  .bn-work__diff {
     display: none;
   }
 

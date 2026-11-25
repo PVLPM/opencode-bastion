@@ -524,10 +524,59 @@ describe("FleetPanel", () => {
     expect(rows).toHaveLength(3);
     expect(rows[0]?.querySelector(".bn-badge")?.textContent).toBe("Fixer");
     expect(rows[0]?.querySelector(".bn-title")?.textContent).toBe("Fix the failing test");
-    expect(rows[1]?.textContent).toBe("Fix recovery regressions•Running tests…");
+    expect(rows[1]?.textContent).toBe("Fix recovery regressions•Running tests…+12−3");
     expect(rows[2]?.querySelector(".bn-model__name")?.textContent).toBe("Opus 5.5");
     expect(rows[2]?.querySelector(".bn-model__effort")?.textContent).toBe("Medium");
-    expect(rows[2]?.querySelector(".bn-lines")?.textContent).toBe("+12−3");
+    expect(rows[2]?.querySelector(".bn-lines")).toBeNull();
+  });
+
+  it("puts the duration in row one immediately before the status mark", () => {
+    const card = mountPanel({ fleet: testFleet(testRoot(), [runningChild()]) }).querySelector(
+      '[data-bn-card="ses_child_a"]',
+    );
+    const head = card?.querySelector(".bn-row--head");
+    const duration = head?.querySelector(".bn-duration");
+
+    expect(duration?.textContent).toBe("10s");
+    expect(duration?.nextElementSibling).toBe(head?.querySelector(".bn-card__mark"));
+    expect(card?.querySelector(".bn-row--meta .bn-duration")).toBeNull();
+  });
+
+  it("keeps the task, the activity and the session diff in row two, in that order", () => {
+    const fleet = testFleet(testRoot(), [
+      runningChild({
+        task: "Fix recovery regressions",
+        activity: "Running tests…",
+        lines: { added: 12, removed: 3, files: 2, truncated: false },
+      }),
+    ]);
+    const card = mountPanel({ fleet }).querySelector('[data-bn-card="ses_child_a"]');
+    const work = card?.querySelector(".bn-row--work");
+
+    expect([...(work?.children ?? [])].map((child) => child.className)).toEqual([
+      "bn-task",
+      "bn-sep",
+      "bn-ticker",
+      "bn-work__diff",
+    ]);
+    expect(work?.lastElementChild?.querySelector(".bn-lines")?.textContent).toBe("+12−3");
+    expect(card?.querySelector(".bn-row--meta .bn-lines")).toBeNull();
+  });
+
+  it("keeps a finished task and its diff without an orphaned separator", () => {
+    const fleet = testFleet(testRoot(), [
+      runningChild({
+        task: "Fix recovery regressions",
+        status: "done",
+        endedAt: TEST_NOW,
+        activity: undefined,
+        lines: { added: 12, removed: 3, files: 2, truncated: false },
+      }),
+    ]);
+    const row = mountPanel({ fleet }).querySelector('[data-bn-card="ses_child_a"] .bn-row--work');
+
+    expect(row?.querySelectorAll(".bn-sep")).toHaveLength(0);
+    expect(row?.textContent).toBe("Fix recovery regressions+12−3");
   });
 
   it.each([
