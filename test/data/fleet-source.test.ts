@@ -57,6 +57,12 @@ function messageWithSnapshot(
   return message;
 }
 
+function historyMessages(count: number, start = 0): SessionMessageInfo[] {
+  return Array.from({ length: count }, (_, index) =>
+    makeAssistant({ id: `msg-${start + index}`, created: start + index }),
+  );
+}
+
 describe("createFleetSource host compatibility", () => {
   type HostSessionCompatible = MountedSession extends FleetSession ? true : false;
   const hostSessionCompatible: HostSessionCompatible = true;
@@ -414,6 +420,377 @@ describe("createFleetSource syncing", () => {
       await flush();
 
       expect(fake.calls.messageSyncs.filter((id) => id === "ses-root").length).toBeGreaterThan(1);
+    });
+  });
+});
+
+describe("createFleetSource history", () => {
+  it("makes no older-page request for a short transcript", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root" }),
+          messages: [makeAssistant({ id: "msg-only", created: 1 })],
+        },
+      ],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(source.fleet()?.root.sessionID).toBe("ses-root");
+      expect(fake.calls.messageSyncs).toStrictEqual(["ses-root"]);
+      expect(fake.calls.messageLoadMores).toStrictEqual([]);
+    });
+  });
+
+  it("loads every older page of a long transcript", async () => {
+    const all = historyMessages(450);
+    const window = all.slice(-50);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }), messages: window }],
+      messagesOnSync: { "ses-root": window },
+      olderMessages: { "ses-root": all.slice(0, -50) },
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      await flush();
+      const list = fake.data.session.message.list("ses-root");
+      expect(list).toHaveLength(450);
+      expect(list[0]?.id).toBe("msg-0");
+      expect(list.at(-1)?.id).toBe("msg-449");
+      expect(fake.calls.messageSyncs).toStrictEqual(["ses-root"]);
+      expect(fake.calls.messageLoadMores).toStrictEqual([{ id: "ses-root", all: true }]);
+      expect(source.fleet()?.root.sessionID).toBe("ses-root");
+    });
+  });
+
+  it("runs one history load at a time across the family", async () => {
+    const all = historyMessages(400);
+    const window = all.slice(-50);
+    const older = all.slice(0, -50);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        { info: makeSession({ id: "ses-root" }), messages: window },
+        {
+          info: makeSession({ id: "ses-child", parentID: "ses-root", created: 2 }),
+          messages: window,
+        },
+        {
+          info: makeSession({ id: "ses-grandchild", parentID: "ses-child", created: 3 }),
+          messages: window,
+        },
+      ],
+      messagesOnSync: { "ses-root": window, "ses-child": window, "ses-grandchild": window },
+      olderMessages: { "ses-root": older, "ses-child": older, "ses-grandchild": older },
+    });
+    const releaseRoot = fake.holdNextLoadMore("ses-root");
+    const releaseChild = fake.holdNextLoadMore("ses-child");
+    const releaseGrandchild = fake.holdNextLoadMore("ses-grandchild");
+
+    await withSource(fake.host, async () => {
+      await flush();
+      expect(fake.calls.messageLoadMores.map((call) => call.id)).toStrictEqual(["ses-root"]);
+
+      releaseRoot();
+      await flush();
+      await flush();
+      expect(fake.calls.messageLoadMores.map((call) => call.id)).toStrictEqual([
+        "ses-root",
+        "ses-child",
+      ]);
+
+      releaseChild();
+      await flush();
+      await flush();
+      expect(fake.calls.messageLoadMores.map((call) => call.id)).toStrictEqual([
+        "ses-root",
+        "ses-child",
+        "ses-grandchild",
+      ]);
+
+      releaseGrandchild();
+      await flush();
+      await flush();
+      expect(fake.data.session.message.list("ses-root")).toHaveLength(400);
+      expect(fake.data.session.message.list("ses-child")).toHaveLength(400);
+      expect(fake.data.session.message.list("ses-grandchild")).toHaveLength(400);
+    });
+  });
+
+  it("hydrates descendants that only feed cost and its tariffs", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        { info: makeSession({ id: "ses-root" }) },
+        { info: makeSession({ id: "ses-child", parentID: "ses-root", created: 2 }) },
+        {
+          info: makeSession({
+            id: "ses-grandchild",
+            parentID: "ses-child",
+            created: 3,
+            location: { directory: "C:\\grand" },
+          }),
+        },
+      ],
+      messagesOnSync: {
+        "ses-grandchild": [makeAssistant({ id: "msg-new", created: 2 })],
+      },
+      olderMessages: {
+        "ses-grandchild": [makeAssistant({ id: "msg-old", created: 1 })],
+      },
+    });
+
+    await withSource(fake.host, async () => {
+      await flush();
+      await flush();
+      expect(fake.calls.messageSyncs).toContain("ses-grandchild");
+      expect(fake.calls.messageLoadMores).toStrictEqual([{ id: "ses-grandchild", all: true }]);
+      expect(fake.data.session.message.list("ses-grandchild")).toHaveLength(2);
+      expect(fake.calls.modelSyncs).toContain("C:\\grand");
+      expect(fake.calls.agentSyncs).toContain("C:\\grand");
+      expect(fake.calls.permissionSyncs).not.toContain("ses-grandchild");
+      expect(fake.calls.formSyncs).not.toContain("ses-grandchild");
+    });
+  });
+
+  it("aborts a load on a route change and refills on return", async () => {
+    const all = historyMessages(400);
+    const window = all.slice(-50);
+    const fake = createFakeHost({
+      routed: "ses-a",
+      sessions: [
+        { info: makeSession({ id: "ses-a" }), messages: window },
+        { info: makeSession({ id: "ses-b" }) },
+      ],
+      messagesOnSync: { "ses-a": window },
+      olderMessages: { "ses-a": all.slice(0, -50) },
+    });
+    const releaseFirst = fake.holdNextLoadMore("ses-a");
+
+    await withSource(fake.host, async () => {
+      await flush();
+      expect(fake.calls.messageLoadMores).toStrictEqual([{ id: "ses-a", all: true }]);
+
+      fake.setRouted("ses-b");
+      await flush();
+      releaseFirst();
+      await flush();
+      expect(fake.data.session.message.list("ses-a")).toHaveLength(50);
+
+      const releaseSecond = fake.holdNextLoadMore("ses-a");
+      fake.setRouted("ses-a");
+      await flush();
+      expect(fake.calls.messageLoadMores.filter((call) => call.id === "ses-a")).toHaveLength(2);
+
+      releaseSecond();
+      await flush();
+      await flush();
+      expect(fake.data.session.message.list("ses-a")).toHaveLength(400);
+    });
+  });
+
+  it("backfills again after a reconnect that reset the store window", async () => {
+    const all = historyMessages(400);
+    const window = all.slice(-50);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }), messages: window }],
+      messagesOnSync: { "ses-root": window },
+      olderMessages: { "ses-root": all.slice(0, -50) },
+    });
+
+    await withSource(fake.host, async () => {
+      await flush();
+      await flush();
+      expect(fake.data.session.message.list("ses-root")).toHaveLength(400);
+
+      fake.setConnected(false);
+      await flush();
+      fake.setConnected(true);
+      await flush();
+      await flush();
+
+      expect(fake.calls.messageLoadMores).toHaveLength(2);
+      expect(fake.data.session.message.list("ses-root")).toHaveLength(400);
+    });
+  });
+
+  it("does not refetch when a reconnect retained the full list", async () => {
+    const all = historyMessages(200);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }), messages: all }],
+    });
+
+    await withSource(fake.host, async () => {
+      await flush();
+      expect(fake.calls.messageLoadMores).toStrictEqual([]);
+
+      fake.setConnected(false);
+      await flush();
+      fake.setConnected(true);
+      await flush();
+      await flush();
+
+      expect(fake.calls.messageLoadMores).toStrictEqual([]);
+      expect(fake.data.session.message.list("ses-root")).toHaveLength(200);
+    });
+  });
+
+  it("records a failed load once and does not retry on its own", async () => {
+    const all = historyMessages(400);
+    const window = all.slice(-50);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }), messages: window }],
+      messagesOnSync: { "ses-root": window },
+      olderMessages: { "ses-root": all.slice(0, -50) },
+    });
+    fake.failLoadMoreOnce("ses-root");
+
+    await withSource(fake.host, async () => {
+      await flush();
+      await flush();
+      await flush();
+      expect(fake.calls.messageLoadMores).toStrictEqual([{ id: "ses-root", all: true }]);
+      expect(fake.data.session.message.list("ses-root")).toHaveLength(50);
+    });
+  });
+
+  it("stops a session whose window lost an anchor during a load", async () => {
+    const all = historyMessages(400);
+    const window = all.slice(-50);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }), messages: window }],
+      messagesOnSync: { "ses-root": window },
+      olderMessages: { "ses-root": all.slice(0, -50) },
+    });
+    const release = fake.holdNextLoadMore("ses-root");
+
+    await withSource(fake.host, async () => {
+      await flush();
+      release();
+      // Let the load publish, then replace the window before the settle lands.
+      await Promise.resolve();
+      fake.replaceMessages("ses-root", [makeAssistant({ id: "msg-replaced", created: 999 })]);
+      await flush();
+      await flush();
+
+      expect(fake.data.session.message.more("ses-root")).toBe(true);
+      expect(fake.calls.messageLoadMores).toStrictEqual([{ id: "ses-root", all: true }]);
+      expect(fake.data.session.message.list("ses-root").map((message) => message.id)).toStrictEqual(
+        ["msg-replaced"],
+      );
+    });
+  });
+
+  it("aborts an in-flight load on disposal without publishing", async () => {
+    const all = historyMessages(400);
+    const window = all.slice(-50);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }), messages: window }],
+      messagesOnSync: { "ses-root": window },
+      olderMessages: { "ses-root": all.slice(0, -50) },
+    });
+    const release = fake.holdNextLoadMore("ses-root");
+    const dispose = createRoot((disposeRoot) => {
+      createFleetSource(fake.host);
+      return disposeRoot;
+    });
+
+    await flush();
+    expect(fake.calls.messageLoadMores).toHaveLength(1);
+    dispose();
+    release();
+    await flush();
+
+    expect(fake.calls.messageLoadMores).toHaveLength(1);
+    expect(fake.data.session.message.list("ses-root")).toHaveLength(50);
+  });
+
+  it("does not beam for history prepended by a backfill", async () => {
+    const window = [makeAssistant({ id: "msg-new", created: 100 })];
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        { info: makeSession({ id: "ses-root" }), messages: window },
+        {
+          info: makeSession({ id: "ses-child", parentID: "ses-root", created: 2 }),
+          status: "running",
+        },
+      ],
+      messagesOnSync: { "ses-root": window },
+      olderMessages: {
+        "ses-root": [
+          makeAssistant({
+            id: "msg-old",
+            created: 1,
+            content: [subagentCall("tool-old", "ses-child", "Old")],
+          }),
+        ],
+      },
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      await flush();
+      expect(fake.calls.messageLoadMores).toStrictEqual([{ id: "ses-root", all: true }]);
+      expect(source.beams()).toStrictEqual([]);
+
+      fake.addMessage(
+        "ses-root",
+        makeAssistant({
+          id: "msg-live",
+          created: 200,
+          content: [subagentCall("tool-old", "ses-child", "Old", "completed")],
+        }),
+      );
+      await flush();
+
+      expect(source.beams().filter((beam) => beam.direction === "in")).toHaveLength(1);
+    });
+  });
+
+  it("keeps other members' history across a route change", async () => {
+    const all = historyMessages(400);
+    const window = all.slice(-50);
+    const older = all.slice(0, -50);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        { info: makeSession({ id: "ses-root" }), messages: window },
+        {
+          info: makeSession({ id: "ses-child", parentID: "ses-root", created: 2 }),
+          status: "running",
+          messages: window,
+        },
+      ],
+      messagesOnSync: { "ses-root": window, "ses-child": window },
+      olderMessages: { "ses-root": older, "ses-child": older },
+    });
+
+    await withSource(fake.host, async () => {
+      await flush();
+      await flush();
+      const rootSyncs = fake.calls.messageSyncs.filter((id) => id === "ses-root").length;
+      const rootLoads = fake.calls.messageLoadMores.filter((call) => call.id === "ses-root").length;
+
+      fake.setRouted("ses-child");
+      await flush();
+      await flush();
+
+      expect(fake.calls.messageSyncs.filter((id) => id === "ses-child").length).toBeGreaterThan(0);
+      expect(fake.calls.messageSyncs.filter((id) => id === "ses-root")).toHaveLength(rootSyncs);
+      expect(fake.calls.messageLoadMores.filter((call) => call.id === "ses-root")).toHaveLength(
+        rootLoads,
+      );
+      expect(fake.data.session.message.list("ses-root")).toHaveLength(400);
     });
   });
 });

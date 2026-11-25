@@ -45,7 +45,7 @@ Fixtures are synthetic. Never copy a real transcript into `test/`.
 ## Fake host
 
 `test/data/fake-host.ts` implements the narrow `FleetData` slice that
-`createFleetSource` reads, plus `FleetHost`.
+`createFleetSource` reads (including `session.family`), plus `FleetHost`.
 
 Seeding (`createFakeHost({...})`):
 
@@ -53,6 +53,8 @@ Seeding (`createFakeHost({...})`):
   `forms`, `status`, `loaded: false` (known but not loaded) or `deleted: true`.
 - `childrenOnSync` and `messagesOnSync` add data when a sync resolves, modelling
   a child discovered later and messages arriving after hydration.
+- `olderMessages` seeds the pages behind the `messagesOnSync` window; after a
+  sync `more` is true until `loadMore` drains them, then false.
 - `agents`, `models`, `agentsByLocation`, `modelsByLocation` cover the location
   catalog and per-directory differences.
 - `diff` and `prices` stand in for the network; `sessionGate` and `messageGate`
@@ -66,8 +68,10 @@ Controls on the returned object:
 - `addMessage`, `addMessages`, `setStatus`, `setPermissions`, `setForms`,
   `setAgents`, `setModels`;
 - `holdNextMessageSync(sessionID)` releases one message sync on demand;
-- `calls` records session/message/permission/form/agent/model syncs, diff calls,
-  opened tabs and price fetches.
+  `holdNextLoadMore`, `failLoadMoreOnce`, `replaceMessages` and `evictMessages`
+  exercise the older-message cursor;
+- `calls` records session/message/permission/form/agent/model syncs, history
+  `messageLoadMores` (`{ id, all }`), diff calls, opened tabs and price fetches.
 
 Mount a source inside an owner so effects run and clean up:
 
@@ -116,6 +120,10 @@ old one is reused.
 
 A failed sync removes its key so the next store change retries it. There is no
 timer-based retry; do not add one in a test or in code.
+
+A message sync replaces that session's window and resets its older-message
+cursor, so backfill assertions read the store's list and `more`/`loading`
+behavior, never an assumption that earlier loaded pages survived.
 
 ### DOM tests: ownership, cleanup and host gaps
 

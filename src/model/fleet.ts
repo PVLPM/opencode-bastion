@@ -25,7 +25,7 @@ export interface SessionSnapshot {
 export interface FleetInput {
   root: SessionSnapshot;
   children: SessionSnapshot[];
-  /** Every descendant at any depth; used only for the family total. */
+  /** Every descendant at any depth; feeds the family total, never a live card. */
   descendants: SessionSnapshot[];
   currentID: string;
   agentName(info: SessionInfo): string;
@@ -40,6 +40,8 @@ export interface FleetInput {
   ): number | undefined;
   /** Exact reported cost for the whole family, as the store already sums it. */
   familyCost: number;
+  /** False until the family index and every member's info have loaded. */
+  familyComplete: boolean;
   /** False once the host connection drops; live statuses become unknown. */
   connected: boolean;
 }
@@ -65,7 +67,7 @@ function familyTotal(
   members: ReadonlyMap<string, SessionSnapshot>,
   costs: ReadonlyMap<string, SessionPrice>,
 ): Money | undefined {
-  if (!Number.isFinite(input.familyCost)) return undefined;
+  if (!input.familyComplete || !Number.isFinite(input.familyCost)) return undefined;
   let usd = input.familyCost;
   let estimated = false;
   for (const snapshot of members.values()) {

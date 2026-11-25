@@ -20,12 +20,15 @@ import { tokenTotal } from "../model/usage";
 
 export interface FleetData {
   readonly session: Omit<
-    Pick<Data["session"], "get" | "list" | "missing" | "root" | "status" | "cost" | "sync">,
+    Pick<Data["session"], "get" | "missing" | "family" | "root" | "status" | "cost" | "sync">,
     "get"
   > & {
     /** The host store returns undefined for a session it has not loaded yet. */
     get(sessionID: string): SessionInfo | undefined;
-    readonly message: Pick<Data["session"]["message"], "list" | "sync">;
+    readonly message: Pick<
+      Data["session"]["message"],
+      "list" | "sync" | "more" | "loading" | "loadMore"
+    >;
     readonly permission: Pick<Data["session"]["permission"], "sync"> & {
       /**
        * Typed as an array by the SDK, but the store returns `store.session.permission[id]`,
@@ -88,6 +91,14 @@ interface Family extends Anchor {
   readonly root: SessionInfo;
   readonly children: SessionInfo[];
   readonly descendants: SessionInfo[];
+  readonly familyComplete: boolean;
+}
+
+interface Backfill {
+  readonly sessionID: string;
+  readonly scope: string;
+  readonly anchors: ReadonlySet<string>;
+  readonly controller: AbortController;
 }
 
 interface Hydration {
@@ -110,29 +121,19 @@ function sessionInfo(data: FleetData, sessionID: string): SessionInfo | undefine
   return data.session.get(sessionID);
 }
 
-function knownSessions(data: FleetData): SessionInfo[] {
-  return data.session.list().filter((info) => !data.session.missing(info.id));
-}
-
-function directChildren(data: FleetData, rootID: string): SessionInfo[] {
-  return knownSessions(data).filter((info) => info.parentID === rootID);
-}
-
-/** Every known descendant at any depth, so a grandchild's cost is never dropped. */
-function descendantsOf(data: FleetData, rootID: string): SessionInfo[] {
-  const all = knownSessions(data);
-  const byID = new Map(all.map((info) => [info.id, info]));
-  const under = (info: SessionInfo): boolean => {
-    const seen = new Set<string>([info.id]);
-    let parentID = info.parentID;
-    while (parentID !== undefined && !seen.has(parentID)) {
-      if (parentID === rootID) return true;
-      seen.add(parentID);
-      parentID = byID.get(parentID)?.parentID;
-    }
-    return false;
-  };
-  return all.filter((info) => info.id !== rootID && under(info));
+/**
+ * The store's family index is the single list both the fleet and the cost
+ * estimate use, so a base total and an estimate cannot cover different members.
+ */
+function familyInfos(data: FleetData, rootID: string) {
+  const ids = [...new Set([rootID, ...data.session.family(rootID)])];
+  const infos: SessionInfo[] = [];
+  for (const id of ids) {
+    if (data.session.missing(id)) continue;
+    const info = data.session.get(id);
+    if (info !== undefined) infos.push(info);
+  }
+  return { ids, infos };
 }
 
 function capitalize(value: string): string {
@@ -221,8 +222,11 @@ export function createFleetSource(host: FleetHost): FleetSource {
   const [beams, setBeams] = createSignal<readonly Beam[]>([]);
   const [lines, setLines] = createSignal<ReadonlyMap<string, LineStats | undefined>>(new Map());
   const [hydration, setHydration] = createSignal<Hydration | undefined>(undefined);
+  const [familyReady, setFamilyReady] = createSignal<string | undefined>(undefined);
+  const [historyRevision, setHistoryRevision] = createSignal(0);
 
   const synced = new Set<string>();
+  const historyFailures = new Set<string>();
   const lineKeys = new Map<string, number>();
   const lineRequests = new Map<string, number>();
   let lineRequestSequence = 0;
@@ -230,6 +234,8 @@ export function createFleetSource(host: FleetHost): FleetSource {
   let activation = 0;
   let beamScope: string | undefined;
   let beamPrevious: ReadonlyMap<string, SubagentCall> | undefined;
+  let backfill: Backfill | undefined;
+  let backfillRoot = false;
   let pricesStarted = false;
 
   const beamTimers = new Set<ReturnType<typeof setTimeout>>();
@@ -251,12 +257,32 @@ export function createFleetSource(host: FleetHost): FleetSource {
     }
   }
 
-  onCleanup(clearBeams);
+  function bumpHistory(): void {
+    setHistoryRevision((value) => value + 1);
+  }
+
+  /** Abort the one load in flight, so a stale publication never lands. */
+  function abortBackfill(sessionID?: string): void {
+    if (backfill === undefined) return;
+    if (sessionID !== undefined && backfill.sessionID !== sessionID) return;
+    const { controller } = backfill;
+    backfill = undefined;
+    controller.abort();
+  }
+
+  onCleanup(() => {
+    abortBackfill();
+    clearBeams();
+  });
 
   function resetScope(): void {
     activation += 1;
+    abortBackfill();
     synced.clear();
+    historyFailures.clear();
+    backfillRoot = false;
     setHydration(undefined);
+    setFamilyReady(undefined);
     beamScope = undefined;
     beamPrevious = undefined;
     clearBeams();
@@ -299,12 +325,36 @@ export function createFleetSource(host: FleetHost): FleetSource {
     if (current === undefined) return undefined;
     const root = sessionInfo(current.data, current.rootID);
     if (root === undefined) return undefined;
+    const { ids, infos } = familyInfos(current.data, current.rootID);
+    const children = infos.filter((info) => info.id !== root.id && info.parentID === root.id);
+    const descendants = infos.filter((info) => info.id !== root.id && info.parentID !== root.id);
     return {
       ...current,
       root,
-      children: directChildren(current.data, current.rootID),
-      descendants: descendantsOf(current.data, current.rootID),
+      children,
+      descendants,
+      // A cost total is only claimed once the family sync resolved and every
+      // indexed member has info; otherwise the estimate could cover less.
+      familyComplete: familyReady() === scopeKey(current) && infos.length === ids.length,
     };
+  });
+
+  let trackedRouted: { readonly scope: string; readonly id: string } | undefined;
+  createEffect(() => {
+    const current = anchor();
+    if (current === undefined) return;
+    const scope = scopeKey(current);
+    const previous = trackedRouted;
+    trackedRouted = { scope, id: current.routedID };
+    // A route change re-syncs only the newly routed member; the rest of the
+    // family keeps its loaded history.
+    if (previous === undefined || previous.scope !== scope || previous.id === current.routedID) {
+      return;
+    }
+    abortBackfill(current.routedID);
+    historyFailures.delete(current.routedID);
+    synced.delete(`${scope}\nmessages\n${current.routedID}`);
+    bumpHistory();
   });
 
   createEffect(() => {
@@ -319,36 +369,49 @@ export function createFleetSource(host: FleetHost): FleetSource {
     if (data.session.missing(current.rootID)) return;
 
     syncOnce(`${scope}\nrouted\n${current.routedID}`, () => data.session.sync(current.routedID));
-    syncOnce(`${scope}\nroot`, () => data.session.sync(current.rootID, { children: true }));
+    syncOnce(
+      `${scope}\nroot`,
+      () => data.session.sync(current.rootID, { children: true }),
+      () => {
+        if (syncScope !== scope) return;
+        setFamilyReady(scope);
+      },
+    );
 
     const root = sessionInfo(data, current.rootID);
     if (root === undefined) return;
 
-    const members = [root, ...directChildren(data, current.rootID)];
+    const { infos } = familyInfos(data, current.rootID);
+    const direct = new Set([
+      root.id,
+      ...infos.filter((info) => info.parentID === root.id).map((info) => info.id),
+    ]);
     const locations = new Map<string, LocationRef>();
-    for (const info of members) locations.set(locationKey(info.location), info.location);
+    for (const info of infos) locations.set(locationKey(info.location), info.location);
     for (const [key, location] of locations) {
       syncOnce(`${scope}\nagents\n${key}`, () => data.location.agent.sync(location));
       syncOnce(`${scope}\nmodels\n${key}`, () => data.location.model.sync(location));
       syncOnce(`${scope}\nproviders\n${key}`, () => data.location.provider.sync(location));
     }
 
-    for (const info of members) {
-      if (info.id === root.id) {
-        syncOnce(
-          `${scope}\nmessages\n${info.id}`,
-          () => data.session.message.sync(info.id),
-          () => {
-            if (syncScope !== scope) return;
+    for (const info of infos) {
+      syncOnce(
+        `${scope}\nmessages\n${info.id}`,
+        () => data.session.message.sync(info.id),
+        () => {
+          if (syncScope !== scope) return;
+          historyFailures.delete(info.id);
+          bumpHistory();
+          if (info.id === root.id) {
             setHydration({
               scope,
               calls: subagentCalls(data.session.message.list(info.id)),
             });
-          },
-        );
-      } else {
-        syncOnce(`${scope}\nmessages\n${info.id}`, () => data.session.message.sync(info.id));
-      }
+          }
+        },
+      );
+      // Permissions and forms only drive the live root and direct-child cards.
+      if (!direct.has(info.id)) continue;
       syncOnce(`${scope}\npermissions\n${info.id}`, () => data.session.permission.sync(info.id));
       syncOnce(`${scope}\nforms\n${info.id}`, () => data.session.form.sync(info.id, info.location));
     }
@@ -359,15 +422,81 @@ export function createFleetSource(host: FleetHost): FleetSource {
     if (current === undefined) return;
     const scope = scopeKey(current);
     const hydrated = hydration();
+    // A settle with no new rows still has to consume a pending rebaseline.
+    historyRevision();
     if (hydrated === undefined || hydrated.scope !== scope) return;
     const next = subagentCalls(current.data.session.message.list(current.rootID));
     if (beamScope !== scope || beamPrevious === undefined) {
       beamScope = scope;
       beamPrevious = hydrated.calls;
     }
+    if (backfillRoot) {
+      backfillRoot = false;
+      beamPrevious = next;
+      const calls = new Map(hydrated.calls);
+      for (const [toolID, call] of next) {
+        if (!calls.has(toolID)) calls.set(toolID, call);
+      }
+      setHydration({ scope, calls });
+      return;
+    }
     const created = detectBeams(hydrated.calls, beamPrevious, next);
     beamPrevious = next;
     if (created.length > 0) addBeams(created);
+  });
+
+  createEffect(() => {
+    const current = family();
+    if (current === undefined || !current.connected) return;
+    const scope = scopeKey(current);
+    // Every settled page asks for the next member; one load runs at a time.
+    historyRevision();
+    if (backfill !== undefined) return;
+    const data = current.data;
+    for (const info of [current.root, ...current.children, ...current.descendants]) {
+      if (historyFailures.has(info.id)) continue;
+      if (data.session.message.loading(info.id)) continue;
+      if (!data.session.message.more(info.id)) continue;
+      const anchors = new Set(data.session.message.list(info.id).map((message) => message.id));
+      const controller = new AbortController();
+      const load: Backfill = { sessionID: info.id, scope, anchors, controller };
+      const startedAt = activation;
+      backfill = load;
+      const options =
+        info.id === current.rootID
+          ? {
+              all: true,
+              signal: controller.signal,
+              beforePublish: () => {
+                backfillRoot = true;
+              },
+            }
+          : { all: true, signal: controller.signal };
+      data.session.message.loadMore(info.id, options).then(
+        () => {
+          if (backfill !== load) return;
+          backfill = undefined;
+          if (activation !== startedAt || syncScope !== scope) return;
+          // A concurrent host sync can replace the window; losing an anchor
+          // means this session's history is no longer trustworthy.
+          const present = new Set(data.session.message.list(info.id).map((message) => message.id));
+          for (const anchor of load.anchors) {
+            if (present.has(anchor)) continue;
+            historyFailures.add(info.id);
+            break;
+          }
+          bumpHistory();
+        },
+        () => {
+          if (backfill !== load) return;
+          backfill = undefined;
+          if (activation !== startedAt || syncScope !== scope) return;
+          historyFailures.add(info.id);
+          bumpHistory();
+        },
+      );
+      return;
+    }
   });
 
   const fleet = createMemo<FleetView | undefined>(() => {
@@ -383,10 +512,12 @@ export function createFleetSource(host: FleetHost): FleetSource {
       forms: data.session.form.list(info.id, info.location)?.length ?? 0,
       lines: lines().get(`${scope}\n${info.id}`),
     });
-    const costOnly = (info: SessionInfo): SessionSnapshot => ({
+    // A descendant feeds cost and usage only; it is never a live card, but its
+    // loaded messages are what carry its unpriced usage records.
+    const costSnapshot = (info: SessionInfo): SessionSnapshot => ({
       info,
       running: false,
-      messages: [],
+      messages: data.session.message.list(info.id),
       permissions: 0,
       forms: 0,
       lines: undefined,
@@ -394,7 +525,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
     return buildFleet({
       root: snapshot(current.root),
       children: current.children.map(snapshot),
-      descendants: current.descendants.map(costOnly),
+      descendants: current.descendants.map(costSnapshot),
       currentID: current.routedID,
       agentName: (info) => agentNameFor(data, info),
       modelLabel: (location, ref) =>
@@ -411,6 +542,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
       price: (info, ref, tokens, aggregated) =>
         priceUsage(data, prices(), info, ref, tokens, aggregated),
       familyCost: data.session.cost(current.rootID),
+      familyComplete: current.familyComplete,
       connected: current.connected,
     });
   });

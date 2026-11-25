@@ -34,6 +34,8 @@ export interface FakeHostOptions {
   readonly sessions?: readonly FakeSession[];
   readonly childrenOnSync?: Readonly<Record<string, readonly SessionInfo[]>>;
   readonly messagesOnSync?: Readonly<Record<string, readonly SessionMessageInfo[]>>;
+  /** Older pages behind the sync window, oldest first. */
+  readonly olderMessages?: Readonly<Record<string, readonly SessionMessageInfo[]>>;
   readonly agents?: AgentInfo[];
   readonly models?: ModelInfo[];
   readonly providers?: ProviderInfo[];
@@ -97,6 +99,8 @@ export function createFakeHost(options: FakeHostOptions = {}) {
     ),
   );
   const [messages, setMessages] = createSignal<Record<string, SessionMessageInfo[]>>(seedMessages);
+  const [messageLoading, setMessageLoading] = createSignal<Record<string, true>>({});
+  const [messageMore, setMessageMore] = createSignal<Record<string, true>>({});
   const [permissions, setPermissions] = createSignal<Record<string, PermissionRequest[]>>(
     recordFrom(seeds, (seed) => seed.permissions),
   );
@@ -118,12 +122,18 @@ export function createFakeHost(options: FakeHostOptions = {}) {
 
   const failSessionSyncs = new Set(options.failSessionSyncOnce ?? []);
   const failMessageSyncs = new Set(options.failMessageSyncOnce ?? []);
+  const failLoadMores = new Set<string>();
   const messageHolds = new Map<string, { promise: Promise<void>; release: () => void }>();
+  const loadMoreHolds = new Map<string, { promise: Promise<void>; release: () => void }>();
+  const olderRemaining: Record<string, SessionMessageInfo[]> = Object.fromEntries(
+    Object.entries(options.olderMessages ?? {}).map(([sessionID, list]) => [sessionID, [...list]]),
+  );
   const agentsByLocation = options.agentsByLocation ?? {};
   const modelsByLocation = options.modelsByLocation ?? {};
 
   const sessionSyncs: { id: string; children: boolean }[] = [];
   const messageSyncs: string[] = [];
+  const messageLoadMores: { id: string; all: boolean }[] = [];
   const permissionSyncs: string[] = [];
   const formSyncs: string[] = [];
   const agentSyncs: string[] = [];
@@ -135,6 +145,26 @@ export function createFakeHost(options: FakeHostOptions = {}) {
 
   const isLoaded = (sessionID: string): boolean =>
     loaded()[sessionID] === true && deleted()[sessionID] !== true;
+
+  function setMore(sessionID: string, value: boolean): void {
+    setMessageMore((current) => {
+      if ((current[sessionID] === true) === value) return current;
+      const next = { ...current };
+      if (value) next[sessionID] = true;
+      else delete next[sessionID];
+      return next;
+    });
+  }
+
+  function setLoading(sessionID: string, value: boolean): void {
+    setMessageLoading((current) => {
+      if ((current[sessionID] === true) === value) return current;
+      const next = { ...current };
+      if (value) next[sessionID] = true;
+      else delete next[sessionID];
+      return next;
+    });
+  }
 
   function load(sessionID: string): void {
     if (deleted()[sessionID] === true) return;
@@ -172,12 +202,20 @@ export function createFakeHost(options: FakeHostOptions = {}) {
     return total;
   }
 
+  /** Mirrors the store's family index: the root's loaded descendants. */
+  function family(sessionID: string): string[] {
+    const rootID = rootOf(sessionID);
+    return knownSessions()
+      .filter((info) => info.id !== rootID && rootOf(info.id) === rootID)
+      .map((info) => info.id);
+  }
+
   const data: FleetData = {
     session: {
-      list: () => knownSessions(),
       get: (sessionID) => (isLoaded(sessionID) ? sessions()[sessionID] : undefined),
       missing: (sessionID) => deleted()[sessionID] === true,
       root: (sessionID) => rootOf(sessionID),
+      family: (sessionID) => family(sessionID),
       status: (sessionID) => statuses()[sessionID] ?? "idle",
       cost: (sessionID) => familyCost(sessionID),
       sync: (sessionID, syncOptions) => {
@@ -205,8 +243,11 @@ export function createFakeHost(options: FakeHostOptions = {}) {
           const apply = () => {
             const onSync = options.messagesOnSync?.[sessionID];
             if (onSync !== undefined) {
+              // A sync replaces the window and resets the older cursor.
               setMessages((current) => ({ ...current, [sessionID]: [...onSync] }));
+              olderRemaining[sessionID] = [...(options.olderMessages?.[sessionID] ?? [])];
             }
+            setMore(sessionID, (olderRemaining[sessionID]?.length ?? 0) > 0);
             load(sessionID);
           };
           const hold = messageHolds.get(sessionID);
@@ -215,6 +256,44 @@ export function createFakeHost(options: FakeHostOptions = {}) {
             return hold.promise.then(apply);
           }
           return afterGate(options.messageGate, apply);
+        },
+        more: (sessionID) => messageMore()[sessionID] === true,
+        loading: (sessionID) => messageLoading()[sessionID] === true,
+        loadMore: (sessionID, loadOptions) => {
+          messageLoadMores.push({ id: sessionID, all: loadOptions?.all === true });
+          const signal = loadOptions?.signal;
+          if (signal?.aborted) return Promise.resolve();
+          if (messageMore()[sessionID] !== true) return Promise.resolve();
+          if (failLoadMores.delete(sessionID)) {
+            setLoading(sessionID, true);
+            return Promise.reject(new Error(`Failed to load messages for ${sessionID}`)).finally(
+              () => setLoading(sessionID, false),
+            );
+          }
+          setLoading(sessionID, true);
+          const apply = () => {
+            if (signal?.aborted) return;
+            const existing = messages()[sessionID] ?? [];
+            const ids = new Set(existing.map((message) => message.id));
+            const older = olderRemaining[sessionID] ?? [];
+            olderRemaining[sessionID] = [];
+            const fetched: SessionMessageInfo[] = [];
+            // The host pages 200 at a time; only IDs already in the window are
+            // filtered, so duplicates inside a page survive like the real store.
+            for (let index = 0; index < older.length; index += 200) {
+              fetched.push(...older.slice(index, index + 200));
+            }
+            loadOptions?.beforePublish?.();
+            setMessages((current) => ({
+              ...current,
+              [sessionID]: [...fetched.filter((message) => !ids.has(message.id)), ...existing],
+            }));
+            setMore(sessionID, false);
+          };
+          const hold = loadMoreHolds.get(sessionID);
+          if (hold !== undefined) loadMoreHolds.delete(sessionID);
+          const ready = hold === undefined ? Promise.resolve() : hold.promise;
+          return ready.then(apply).finally(() => setLoading(sessionID, false));
         },
       },
       permission: {
@@ -314,6 +393,33 @@ export function createFakeHost(options: FakeHostOptions = {}) {
       messageHolds.set(sessionID, { promise, release });
       return release;
     },
+    holdNextLoadMore: (sessionID: string) => {
+      let release: () => void = () => undefined;
+      const promise = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      loadMoreHolds.set(sessionID, { promise, release });
+      return release;
+    },
+    failLoadMoreOnce: (sessionID: string) => {
+      failLoadMores.add(sessionID);
+    },
+    // Models a concurrent host sync: the window is replaced and the older
+    // cursor comes back when the seeded pages still exist.
+    replaceMessages: (sessionID: string, list: readonly SessionMessageInfo[]) => {
+      setMessages((currentMessages) => ({ ...currentMessages, [sessionID]: [...list] }));
+      olderRemaining[sessionID] = [...(options.olderMessages?.[sessionID] ?? [])];
+      setMore(sessionID, (olderRemaining[sessionID]?.length ?? 0) > 0);
+    },
+    evictMessages: (sessionID: string) => {
+      setMessages((currentMessages) => {
+        const next = { ...currentMessages };
+        delete next[sessionID];
+        return next;
+      });
+      olderRemaining[sessionID] = [...(options.olderMessages?.[sessionID] ?? [])];
+      setMore(sessionID, false);
+    },
     addSession: (info: SessionInfo) => {
       remember(info);
       load(info.id);
@@ -350,6 +456,7 @@ export function createFakeHost(options: FakeHostOptions = {}) {
     calls: {
       sessionSyncs,
       messageSyncs,
+      messageLoadMores,
       permissionSyncs,
       formSyncs,
       agentSyncs,

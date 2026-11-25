@@ -46,6 +46,7 @@ function fleetInput(overrides: Partial<FleetInput> = {}): FleetInput {
     contextLimit: () => undefined,
     price: () => undefined,
     familyCost: 0,
+    familyComplete: true,
     connected: true,
     ...overrides,
   };
@@ -557,6 +558,16 @@ describe("buildFleet", () => {
     expect(fleet.totalCost).toStrictEqual({ usd: 1, estimated: false });
     expect(fleet.root.cost).toStrictEqual({ usd: 0.7, estimated: false });
     expect(fleet.inactive[0]?.cost).toStrictEqual({ usd: 0.3, estimated: false });
+  });
+
+  it("leaves the family total unknown until the family index is complete", () => {
+    const input = fleetInput({
+      root: snapshot({ id: "ses-root", cost: 0.7 }),
+      familyCost: 0.7,
+      familyComplete: false,
+    });
+
+    expect(buildFleet(input).totalCost).toBeUndefined();
   });
 
   it("adds an estimate only for an unpriced member and keeps reported costs", () => {
