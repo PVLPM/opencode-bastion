@@ -81,6 +81,8 @@ Cards:
       cumulative token rows and a Changes row with the distinct file count.
 - [ ] A truncated diff is labelled partial in the collapsed line count and the
       Changes row, and its tooltip says the directory listing was truncated.
+- [ ] The header token total is the known total for loaded sessions, as its title
+      says.
 - [ ] The provider logo sits in a 14px optical box 4px from the model name; wide
       layouts reserve the context-ring slot.
 - [ ] Clicking the card body opens the session; clicking the disclosure expands

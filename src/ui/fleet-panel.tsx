@@ -128,7 +128,10 @@ export function FleetPanel(props: FleetPanelProps) {
               <span class="bn-head__usage">
                 <Show when={familyTokens()}>
                   {(tokens) => (
-                    <span class="bn-head__tokens" title="Known family token total">
+                    <span
+                      class="bn-head__tokens"
+                      title="Known family token total for loaded sessions"
+                    >
                       {tokens()}
                     </span>
                   )}

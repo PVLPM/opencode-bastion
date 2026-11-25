@@ -100,8 +100,8 @@ These have produced real defects or are easy to get wrong:
 - [ ] Tokens only: native `--v2-*` with fallbacks; no new literals outside the
       documented fallback block; `bn-` classes; no styles outside `.bn-panel`.
 - [ ] Card: three fixed rows, ellipsized identity, right status mark, separator
-      only when both parts exist, metrics order (lines, duration, cost, ring,
-      chevron), disclosure separate from the open action.
+      only when both parts exist, metrics order (lines, duration, total tokens,
+      cost, ring, chevron), disclosure separate from the open action.
 - [ ] Elevation meaning: live raised, finished sunken with a hairline, routed
       card ringed.
 - [ ] Fleet wires: active accent, finished quiet, aligned to measured cards;
@@ -114,7 +114,9 @@ These have produced real defects or are easy to get wrong:
       and no first-mount motion.
 - [ ] Cost digits roll only when the formatted value changes; reduced motion shows
       the final text immediately; the accessible text is exact.
-- [ ] Narrow widths keep cost and duration; dropped values remain in the details.
+- [ ] Narrow widths: the header running count drops at ≤330px header width, the
+      card cost at ≤330px, line counts at ≤300px and the ring at ≤280px; duration
+      stays, and dropped values remain in the details.
 - [ ] Keyboard: every action reachable, focus visible, closed details inert,
       tooltips dismiss with `Escape`, resize handle has range semantics.
 - [ ] Accessible names state the same thing as the visible label; color is not

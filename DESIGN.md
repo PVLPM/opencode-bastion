@@ -481,11 +481,11 @@ labels and axis, which is why the panel is usable at 320px.
   compaction means no ring.
 - **Tokens**: cumulative per-session usage as OpenCode reports it. The total is
   non-cached input plus output, reasoning and cache reads/writes, each counted
-  once; cache tokens are not added to input again. The family total sums distinct
-  sessions only, so a child that also appears as a descendant is counted once. A
-  session with any invalid counter has no token metric and makes the family total
-  absent; zero is shown when zero is the measured value. The context ring still
-  measures the latest token-bearing
+  once; cache tokens are not added to input again. The family total sums loaded
+  family sessions once each, so a child that also appears as a descendant is
+  counted once; the header title says so. A session with any invalid counter has
+  no token metric and makes the family total absent; zero is shown when zero is
+  the measured value. The context ring still measures the latest token-bearing
   assistant against its model's limit; it is not the cumulative total.
 - **Changes**: the session's own cumulative diff, refreshed from the latest
   completed assistant turn. An explicit `files: []` describes only that turn, so

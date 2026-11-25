@@ -234,7 +234,7 @@ describe("FleetPanel", () => {
     expect(metric?.textContent).toBe("12.8k tok");
     expect(host.querySelector(".bn-head__tokens")?.textContent).toBe("12.8k tok");
     expect(host.querySelector(".bn-head__tokens")?.getAttribute("title")).toBe(
-      "Known family token total",
+      "Known family token total for loaded sessions",
     );
   });
 
