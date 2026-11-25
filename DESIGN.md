@@ -490,21 +490,25 @@ labels and axis, which is why the panel is usable at 320px.
 - A value with no evidence is absent; it is not replaced by a guess or a
   placeholder. Zero appears only when zero is the measured value. No invented
   percentages, statuses or model names.
-- **Cost**: each completed request is priced on its own route. OpenCode's
-  recorded cost wins; a zero-cost request is estimated from the host's own model
-  rates, else models.dev list prices, applying the request's own context tier.
-  The session total is the reported cumulative cost plus estimates for its
-  zero-cost requests, shown with `~` and the tooltip `Estimated at API list price`
-  when any estimate applies. If a zero-cost request cannot be priced, or a
-  session with no reported cost has a loaded history shorter than its cumulative
-  tokens, cost is absent rather than understated. The header total is the reported
-  family total plus only the estimated share of members that had a reported cost,
-  or the whole estimate for members that had none, so nothing is counted twice;
-  if any member cannot be priced, the total is absent. `claude-agent` is Anthropic
-  CLI routing for subscription use. Its unversioned aliases are resolved from the
-  host's model metadata and display name, never a hardcoded version, and priced
-  with Anthropic list prices, so the estimate is an API-list-price equivalent, not
-  subscription spend. It stays estimated (`~`) like any other estimate.
+- **Cost**: each loaded completed request is priced on its own route. Bastion
+  pages the family's native message history, so older requests are included.
+  OpenCode's recorded cost wins; a zero-cost request is estimated from the host's
+  own model rates, else models.dev list prices, applying the request's own
+  context tier. The session total is the reported cumulative cost plus estimates
+  for its loaded zero-cost requests, shown with `~` and the tooltip `Estimated at
+  API list price` when any estimate applies. The value covers loaded messages
+  only and may be incomplete: title, generate and reverted usage has no message,
+  so token totals are not a completeness proof. If a zero-cost request cannot be
+  priced, or a session with no reported cost has no loaded usage at all, cost is
+  absent rather than understated. The header total is the reported family total
+  plus only the estimated share of each member, so nothing is counted twice; a
+  member with no reported cost contributes its estimate once. If any member
+  cannot be priced, or its records report a cost the native base does not
+  contain, the total is absent. `claude-agent` is Anthropic CLI routing for
+  subscription use. Its unversioned aliases are resolved from the host's model
+  metadata and display name, never a hardcoded version, and priced with Anthropic
+  list prices, so the estimate is an API-list-price equivalent, not subscription
+  spend. It stays estimated (`~`) like any other estimate.
 - **Context**: the latest token-bearing assistant over the context limit of the
   model that produced those tokens. No limit, zero limit or a completed
   compaction means no ring.

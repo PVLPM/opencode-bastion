@@ -627,6 +627,26 @@ describe("buildFleet", () => {
     expect(buildFleet(input).totalCost).toStrictEqual({ usd: 1.7, estimated: true });
   });
 
+  it("leaves the family total unknown when a zero-cost member's records report a cost", () => {
+    const tokens = makeTokens({ input: 1_000 });
+    const input = fleetInput({
+      children: [
+        snapshot({
+          id: "ses-child",
+          created: 1,
+          running: true,
+          tokens,
+          messages: [makeAssistant({ tokens, cost: 0.2, completed: 1 })],
+        }),
+      ],
+      familyCost: 0,
+    });
+    const fleet = buildFleet(input);
+
+    expect(fleet.active[0]?.cost).toStrictEqual({ usd: 0.2, estimated: false });
+    expect(fleet.totalCost).toBeUndefined();
+  });
+
   it("leaves the family total unknown when an unpriced member cannot be priced", () => {
     const input = fleetInput({
       root: snapshot({ id: "ses-root", cost: 0.7 }),

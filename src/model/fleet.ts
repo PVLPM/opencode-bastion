@@ -57,10 +57,18 @@ function memberCost(input: FleetInput, snapshot: SessionSnapshot): SessionPrice 
 }
 
 /**
- * The reported family sum already covers every member the store knows, so only
- * the estimated share of zero-cost records is added; a member with no reported
- * cost contributes its whole estimate. Any member that cannot be priced leaves
- * the family total unknown instead of silently undercounting it.
+ * The smallest meaningful dollar difference. Record costs and the native base
+ * are decimal dollars summed as floats, so equality needs a tolerance.
+ */
+const COST_EPSILON = 1e-9;
+
+/**
+ * The reported family sum already covers every member's reported cost, so only
+ * the estimated share is added; that share is the whole estimate for a member
+ * with no reported cost. Any member that cannot be priced leaves the family
+ * total unknown instead of silently undercounting it. Records that report a
+ * cost the native base does not contain are contradictory, so they leave the
+ * total unknown too.
  */
 function familyTotal(
   input: FleetInput,
@@ -74,14 +82,11 @@ function familyTotal(
     const info = snapshot.info;
     if (!Number.isFinite(info.cost) || info.cost < 0) return undefined;
     const priced = costs.get(info.id);
-    if (priced === undefined || priced.money === undefined) return undefined;
-    if (info.cost > 0) {
-      const extra = priced.extra ?? 0;
-      usd += extra;
-      if (extra > 0) estimated = true;
-      continue;
+    if (priced === undefined || priced.money === undefined || priced.extra === undefined) {
+      return undefined;
     }
-    usd += priced.money.usd;
+    if (info.cost === 0 && priced.money.usd > priced.extra + COST_EPSILON) return undefined;
+    usd += priced.extra;
     if (priced.money.estimated) estimated = true;
   }
   return { usd, estimated };

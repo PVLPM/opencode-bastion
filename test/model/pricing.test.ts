@@ -446,6 +446,16 @@ describe("usageRecords", () => {
     expect(records[0]).toMatchObject({ aggregated: false, cost: undefined });
     expect(records[1]).toMatchObject({ aggregated: true, cost: 0.5 });
   });
+
+  it("counts a repeated message id once and keeps the last payload", () => {
+    const records = usageRecords([
+      makeAssistant({ id: "msg-repeat", tokens: makeTokens({ input: 1 }), completed: 10 }),
+      makeAssistant({ id: "msg-repeat", tokens: makeTokens({ input: 2 }), completed: 10 }),
+    ]);
+
+    expect(records).toHaveLength(1);
+    expect(records[0]?.tokens.input).toBe(2);
+  });
 });
 
 interface SessionCase {
@@ -481,20 +491,76 @@ const sessionCases: readonly SessionCase[] = [
     base: 0,
     sessionTokens: makeTokens({ input: 600 }),
     records: [
-      makeAssistant({ tokens: makeTokens({ input: 100 }), completed: 10 }),
-      makeAssistant({ tokens: makeTokens({ input: 500 }), completed: 20 }),
+      makeAssistant({ id: "msg-a", tokens: makeTokens({ input: 100 }), completed: 10 }),
+      makeAssistant({ id: "msg-b", tokens: makeTokens({ input: 500 }), completed: 20 }),
     ],
     price: (tokens) => tokens.input / 1_000,
     expected: { usd: 0.6, estimated: true },
     expectedExtra: 0.6,
   },
   {
-    name: "leaves the total unknown when only part of an unreported session is loaded",
+    name: "prices the loaded part of a partially unreported session",
     base: 0,
     sessionTokens: makeTokens({ input: 900 }),
     records: [makeAssistant({ tokens: makeTokens({ input: 500 }), completed: 10 })],
     price: (tokens) => tokens.input / 1_000,
+    expected: { usd: 0.5, estimated: true },
+    expectedExtra: 0.5,
+  },
+  {
+    name: "prices the loaded records when the ledger has a residual without a message",
+    base: 0,
+    sessionTokens: makeTokens({ input: 1_000 }),
+    records: [makeAssistant({ tokens: makeTokens({ input: 400 }), completed: 10 })],
+    price: (tokens) => tokens.input / 1_000,
+    expected: { usd: 0.4, estimated: true },
+    expectedExtra: 0.4,
+  },
+  {
+    name: "leaves an aggregate-only session with no message evidence unknown",
+    base: 0,
+    sessionTokens: makeTokens({ input: 900 }),
+    records: [],
     expected: undefined,
+  },
+  {
+    name: "adds only zero-cost estimates to a reported mixed session",
+    base: 0.5,
+    sessionTokens: makeTokens({ input: 5_500_000 }),
+    records: [
+      makeAssistant({
+        id: "msg-a",
+        tokens: makeTokens({ input: 4_000_000 }),
+        cost: 0,
+        completed: 10,
+      }),
+      makeAssistant({
+        id: "msg-b",
+        tokens: makeTokens({ input: 500_000 }),
+        cost: 0.5,
+        completed: 20,
+      }),
+      makeAssistant({
+        id: "msg-c",
+        tokens: makeTokens({ input: 1_000_000 }),
+        cost: 0,
+        completed: 30,
+      }),
+    ],
+    price: (tokens) => tokens.input / 1_000_000,
+    expected: { usd: 5.5, estimated: true },
+    expectedExtra: 5,
+  },
+  {
+    name: "keeps a complete recorded total exact",
+    base: 0.7,
+    sessionTokens: makeTokens({ input: 1_000 }),
+    records: [
+      makeAssistant({ id: "msg-a", tokens: makeTokens({ input: 400 }), cost: 0.2, completed: 10 }),
+      makeAssistant({ id: "msg-b", tokens: makeTokens({ input: 600 }), cost: 0.5, completed: 20 }),
+    ],
+    expected: { usd: 0.7, estimated: false },
+    expectedExtra: 0,
   },
   {
     name: "keeps the reported cost when the loaded window is partial",

@@ -362,14 +362,17 @@ export interface UsageRecord {
 
 /**
  * Only completed assistant turns and finished compaction attempts carry final
- * usage. A streaming assistant has partial tokens and is skipped.
+ * usage. A streaming assistant has partial tokens and is skipped. A message id
+ * appears once: the host filters loaded pages against the window but not
+ * duplicates inside one fetched batch, so the last payload of a repeated id
+ * wins.
  */
 export function usageRecords(messages: readonly SessionMessageInfo[]): UsageRecord[] {
-  const records: UsageRecord[] = [];
+  const records = new Map<string, UsageRecord>();
   for (const message of messages) {
     if (message.type === "assistant") {
       if (message.time.completed === undefined || message.tokens === undefined) continue;
-      records.push({
+      records.set(message.id, {
         tokens: message.tokens,
         cost: message.cost,
         model: message.model,
@@ -379,27 +382,34 @@ export function usageRecords(messages: readonly SessionMessageInfo[]): UsageReco
     }
     if (message.type !== "compaction" || message.status === "running") continue;
     if (message.tokens === undefined) continue;
-    records.push({
+    records.set(message.id, {
       tokens: message.tokens,
       cost: message.cost,
       model: "model" in message ? message.model : undefined,
       aggregated: true,
     });
   }
-  return records;
+  return [...records.values()];
 }
 
 export interface SessionPrice {
   readonly money: Money | undefined;
-  /** Estimated dollars not already present in the store's cumulative cost. */
+  /**
+   * Estimated dollars for loaded zero-cost records, not already present in the
+   * store's cumulative cost. The loaded window may be incomplete.
+   */
   readonly extra: number | undefined;
 }
 
 export interface SessionPriceInput {
   /** The store's cumulative reported cost for this session. */
   readonly base: number;
-  /** The store's cumulative tokens for this session. */
+  /**
+   * The store's cumulative tokens; not a completeness proof, because the ledger
+   * also includes usage with no message record.
+   */
   readonly tokens: TokenUsageInfo;
+  /** Usage from the loaded message window only. */
   readonly records: readonly UsageRecord[];
   price(ref: ModelRef | undefined, tokens: TokenUsageInfo, aggregated: boolean): number | undefined;
 }
@@ -407,9 +417,13 @@ export interface SessionPriceInput {
 /**
  * The reported cumulative cost is authoritative for priced requests. Only
  * zero-cost records are estimated, so a subscription route adds on top instead
- * of replacing what the host already charged. When nothing was reported, a
- * truncated message window leaves the total unknown rather than priced at one
- * model's tariff.
+ * of replacing what the host already charged. Every loaded record is priced;
+ * token coverage is not proof that the window is complete, because the ledger
+ * also includes title, generate and reverted usage that has no message. The
+ * result therefore covers loaded messages only and may be incomplete.
+ *
+ * A session with nothing reported and no loaded request that carries usage is
+ * unknown rather than priced at one model's tariff.
  */
 export function priceSession(input: SessionPriceInput): SessionPrice {
   if (!Number.isFinite(input.base) || input.base < 0) {
@@ -455,7 +469,11 @@ export function priceSession(input: SessionPriceInput): SessionPrice {
   if (reported === 0) {
     const sessionTokens = usableTokens(input.tokens);
     if (sessionTokens === undefined) return { money: undefined, extra: undefined };
-    if (tokenTotal(sessionTokens) > covered) return { money: undefined, extra: undefined };
+    // No loaded request carries usage, but the ledger does: title, generate or
+    // reverted calls may be the only usage, and none of them has a message.
+    if (covered === 0 && tokenTotal(sessionTokens) > 0) {
+      return { money: undefined, extra: undefined };
+    }
   }
 
   const usd = reported + estimated;

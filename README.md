@@ -46,18 +46,22 @@ Add the absolute path of this folder to `plugins` in your OpenCode config
 
 ## What the numbers mean
 
-- **Cost** is priced per completed request. OpenCode's recorded cost wins; a
+- **Cost** is OpenCode's recorded cumulative cost plus estimates for loaded
+  zero-cost requests. Bastion pages the family's native message history, so every
+  loaded request is priced on its own route: OpenCode's recorded cost wins; a
   zero-cost request is estimated from the host's model rates, else models.dev
-  list prices, using that request's own model and context tier. A session total
-  adds those estimates to the cost OpenCode reports, and `~` marks the result.
-  If a zero-cost request cannot be priced, or a session with no reported cost has
-  more cumulative tokens than its loaded history, cost is Unknown rather than
-  understated. The header total starts from the family total OpenCode reports and
-  adds only the estimated share of each member, so nothing is counted twice. That
-  is not your subscription spend. `claude-agent` is Anthropic CLI routing for
-  subscription use; its unversioned aliases are resolved from the host's model
-  metadata and display name, never a hardcoded version, and its estimate uses
-  Anthropic list prices, so it is an API-list-price equivalent.
+  list prices, using that request's own model and context tier. `~` marks a value
+  with estimates. The total covers loaded messages only and may be incomplete:
+  OpenCode's ledger also includes title, generate and reverted usage that has no
+  message, so token totals are never used as proof of completeness. If a
+  zero-cost request cannot be priced, or a session with no reported cost has no
+  loaded usage at all, cost is Unknown rather than understated. The header total
+  starts from the family total OpenCode reports and adds only the estimated share
+  of each member, so nothing is counted twice. That is not your subscription
+  spend. `claude-agent` is Anthropic CLI routing for subscription use; its
+  unversioned aliases are resolved from the host's model metadata and display
+  name, never a hardcoded version, and its estimate uses Anthropic list prices,
+  so it is an API-list-price equivalent.
 - **Context** is the latest token-bearing assistant turn over the context limit
   of the model that produced those tokens. No limit, zero limit or a completed
   compaction shows no ring.

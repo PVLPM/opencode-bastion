@@ -1,4 +1,4 @@
-import type { SessionMessageInfo } from "@opencode/client/promise";
+import type { ModelRef, SessionMessageInfo } from "@opencode/client/promise";
 import type { MountedSession } from "@opencode/plugin/gui";
 import { createRoot } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
@@ -1638,6 +1638,314 @@ describe("createFleetSource prices", () => {
       expect(fake.calls.priceFetches()).toBe(1);
       await flush();
       expect(source.fleet()?.root.cost).toStrictEqual({ usd: 0.501, estimated: true });
+    });
+  });
+});
+
+describe("createFleetSource prices across history", () => {
+  const nativeModel = (input: number, providerID = "p", id = "m") =>
+    makeModel({
+      providerID,
+      modelID: id,
+      id,
+      cost: [{ input, output: 0, cache: { read: 0, write: 0 } }],
+    });
+
+  /** Completed assistants on one route, all with the same request usage. */
+  function page(
+    count: number,
+    input: number,
+    cost: number,
+    model: ModelRef,
+    start = 0,
+  ): SessionMessageInfo[] {
+    const tokens = makeTokens({ input });
+    return Array.from({ length: count }, (_, index) =>
+      makeAssistant({
+        id: `msg-${start + index}`,
+        created: start + index,
+        completed: start + index + 1,
+        tokens,
+        cost,
+        model,
+      }),
+    );
+  }
+
+  it("prices every page of a subscription-backed session after backfill", async () => {
+    const model: ModelRef = { id: "m", providerID: "p" };
+    const window = page(50, 1_000, 0, model);
+    const older = page(50, 1_000, 0, model, 50);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root", tokens: makeTokens({ input: 100_000 }), model }),
+          messages: window,
+        },
+      ],
+      messagesOnSync: { "ses-root": window },
+      olderMessages: { "ses-root": older },
+      models: [nativeModel(1)],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      await flush();
+      expect(fake.calls.messageLoadMores).toStrictEqual([{ id: "ses-root", all: true }]);
+      const cost = source.fleet()?.root.cost;
+      expect(cost?.estimated).toBe(true);
+      expect(cost?.usd).toBeCloseTo(0.1, 10);
+    });
+  });
+
+  it("counts an older zero-cost request so a mixed session total is not understated", async () => {
+    const model: ModelRef = { id: "m", providerID: "p" };
+    const window = [
+      makeAssistant({
+        id: "msg-paid",
+        created: 1,
+        completed: 2,
+        tokens: makeTokens({ input: 500_000 }),
+        cost: 0.5,
+        model,
+      }),
+      makeAssistant({
+        id: "msg-recent",
+        created: 3,
+        completed: 4,
+        tokens: makeTokens({ input: 1_000_000 }),
+        cost: 0,
+        model,
+      }),
+    ];
+    const older = [
+      makeAssistant({
+        id: "msg-old",
+        created: 0,
+        completed: 1,
+        tokens: makeTokens({ input: 4_000_000 }),
+        cost: 0,
+        model,
+      }),
+    ];
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({
+            id: "ses-root",
+            cost: 0.5,
+            tokens: makeTokens({ input: 5_500_000 }),
+            model,
+          }),
+          messages: window,
+        },
+      ],
+      messagesOnSync: { "ses-root": window },
+      olderMessages: { "ses-root": older },
+      models: [nativeModel(1)],
+    });
+    const release = fake.holdNextLoadMore("ses-root");
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(source.fleet()?.root.cost?.usd).toBeCloseTo(1.5, 10);
+
+      release();
+      await flush();
+      await flush();
+      const cost = source.fleet()?.root.cost;
+      expect(cost?.estimated).toBe(true);
+      expect(cost?.usd).toBeCloseTo(5.5, 10);
+      expect(source.fleet()?.totalCost?.usd).toBeCloseTo(5.5, 10);
+    });
+  });
+
+  it("prices each history page at its own route", async () => {
+    const first: ModelRef = { id: "m", providerID: "p" };
+    const second: ModelRef = { id: "n", providerID: "q" };
+    const window = page(1, 1_000_000, 0, second);
+    const older = page(1, 1_000_000, 0, first, 10);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root", tokens: makeTokens({ input: 2_000_000 }) }),
+          messages: window,
+        },
+      ],
+      messagesOnSync: { "ses-root": window },
+      olderMessages: { "ses-root": older },
+      models: [nativeModel(1, "p", "m"), nativeModel(2, "q", "n")],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      await flush();
+      const cost = source.fleet()?.root.cost;
+      expect(cost?.estimated).toBe(true);
+      expect(cost?.usd).toBeCloseTo(3, 10);
+    });
+  });
+
+  it("keeps a fully recorded session exact without an estimate", async () => {
+    const model: ModelRef = { id: "m", providerID: "p" };
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({
+            id: "ses-root",
+            cost: 0.7,
+            tokens: makeTokens({ input: 1_000 }),
+            model,
+          }),
+          messages: [
+            makeAssistant({
+              id: "msg-a",
+              created: 1,
+              completed: 2,
+              tokens: makeTokens({ input: 200 }),
+              cost: 0.2,
+              model,
+            }),
+            makeAssistant({
+              id: "msg-b",
+              created: 3,
+              completed: 4,
+              tokens: makeTokens({ input: 800 }),
+              cost: 0.5,
+              model,
+            }),
+          ],
+        },
+      ],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(source.fleet()?.root.cost).toStrictEqual({ usd: 0.7, estimated: false });
+      expect(source.fleet()?.totalCost).toStrictEqual({ usd: 0.7, estimated: false });
+      expect(fake.calls.priceFetches()).toBe(0);
+    });
+  });
+
+  it("leaves cost unknown when tokens exist but no message does", async () => {
+    const model: ModelRef = { id: "m", providerID: "p" };
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root", tokens: makeTokens({ input: 1_000 }), model }),
+          messages: [],
+        },
+      ],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(source.fleet()?.root.cost).toBeUndefined();
+      expect(source.fleet()?.totalCost).toBeUndefined();
+    });
+  });
+
+  it("counts a descendant's loaded estimate once in the family total", async () => {
+    const model: ModelRef = { id: "m", providerID: "p" };
+    const window = page(1, 600_000, 0, model);
+    const older = page(1, 400_000, 0, model, 10);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        { info: makeSession({ id: "ses-root", cost: 0.4 }) },
+        { info: makeSession({ id: "ses-child", parentID: "ses-root", cost: 0.3, created: 2 }) },
+        {
+          info: makeSession({
+            id: "ses-grandchild",
+            parentID: "ses-child",
+            created: 3,
+            tokens: makeTokens({ input: 1_000_000 }),
+            model,
+          }),
+          messages: window,
+        },
+      ],
+      messagesOnSync: { "ses-grandchild": window },
+      olderMessages: { "ses-grandchild": older },
+      models: [nativeModel(1)],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      await flush();
+      expect(fake.calls.messageLoadMores).toStrictEqual([{ id: "ses-grandchild", all: true }]);
+      expect(source.fleet()?.active).toStrictEqual([]);
+      const total = source.fleet()?.totalCost;
+      expect(total?.estimated).toBe(true);
+      expect(total?.usd).toBeCloseTo(1.7, 10);
+    });
+  });
+
+  it("counts a duplicated page message once", async () => {
+    const model: ModelRef = { id: "m", providerID: "p" };
+    const duplicate = makeAssistant({
+      id: "msg-dup",
+      created: 1,
+      completed: 2,
+      tokens: makeTokens({ input: 1_000_000 }),
+      cost: 0,
+      model,
+    });
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root", tokens: makeTokens({ input: 1_000_000 }), model }),
+        },
+      ],
+      messagesOnSync: { "ses-root": [] },
+      olderMessages: { "ses-root": [duplicate, duplicate] },
+      models: [nativeModel(1)],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      await flush();
+      expect(fake.data.session.message.list("ses-root")).toHaveLength(2);
+      const cost = source.fleet()?.root.cost;
+      expect(cost?.estimated).toBe(true);
+      expect(cost?.usd).toBeCloseTo(1, 10);
+    });
+  });
+
+  it("prices loaded records when the session has a residual without a message", async () => {
+    const model: ModelRef = { id: "m", providerID: "p" };
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root", tokens: makeTokens({ input: 1_000_000 }), model }),
+          messages: [
+            makeAssistant({
+              id: "msg-a",
+              created: 1,
+              completed: 2,
+              tokens: makeTokens({ input: 400_000 }),
+              cost: 0,
+              model,
+            }),
+          ],
+        },
+      ],
+      models: [nativeModel(1)],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      await flush();
+      const cost = source.fleet()?.root.cost;
+      expect(cost?.estimated).toBe(true);
+      expect(cost?.usd).toBeCloseTo(0.4, 10);
     });
   });
 });
