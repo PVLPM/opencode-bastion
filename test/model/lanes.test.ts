@@ -350,12 +350,34 @@ interface LabelCase {
   readonly text: string | undefined;
 }
 
+const imagePath = "@C:\\shots\\image.png";
+const imagePrompt = `${imagePath}\n\nImplement the change`;
+
 const labelCases: readonly LabelCase[] = [
   {
     name: "a user prompt contributes its first non-empty line",
     messages: [makeUser(10, "\n  Fix the tests  \nmore"), makeAssistant({ id: "a1", created: 20 })],
     label: "Fix the tests",
     text: "Fix the tests  \nmore",
+  },
+  {
+    name: "a user prompt drops a leading image mention",
+    messages: [
+      makeUser(10, "Fallback text", {
+        displayText: imagePrompt,
+        files: [
+          {
+            data: "",
+            mime: "image/png",
+            source: { type: "inline" },
+            mention: { start: 0, end: imagePath.length, text: imagePath },
+          },
+        ],
+      }),
+      makeAssistant({ id: "a1", created: 20 }),
+    ],
+    label: "Implement the change",
+    text: "Implement the change",
   },
   {
     name: "a synthetic prompt prefers its description",

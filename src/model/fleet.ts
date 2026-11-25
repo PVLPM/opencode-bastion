@@ -2,12 +2,12 @@ import type {
   ModelRef,
   SessionInfo,
   SessionMessageInfo,
-  SessionMessageUser,
   TokenUsageInfo,
 } from "@opencode/client/promise";
 
-import { deriveActivity, firstLine, jsonText } from "./activity";
+import { deriveActivity, firstLine } from "./activity";
 import { delegations } from "./delegations";
+import { promptText } from "./prompt";
 import { deriveStatus, latestAssistant } from "./status";
 import type { AgentView, FleetView, LineStats, ModelLabel, Money, TokenStats } from "./types";
 import { contextUsage, sessionInterval, tokenTotal } from "./usage";
@@ -103,36 +103,6 @@ export function sessionTitle(title: string | undefined): string | undefined {
   return title?.replace(SUBAGENT_SUFFIX, "");
 }
 
-interface MentionRange {
-  readonly start: number;
-  readonly end: number;
-  readonly text: string;
-}
-
-/** The typed prompt with the native mention spans removed when they still match. */
-function userPromptText(message: SessionMessageUser): string | undefined {
-  const displayText = jsonText(message.metadata?.displayText);
-  let text = displayText !== undefined && displayText.trim() !== "" ? displayText : message.text;
-  const mentions: MentionRange[] = [];
-  for (const attachment of [
-    ...(message.files ?? []),
-    ...(message.agents ?? []),
-    ...(message.skills ?? []),
-  ]) {
-    if (attachment.mention !== undefined) mentions.push(attachment.mention);
-  }
-  // Earlier offsets stay valid while later ranges are removed first.
-  for (const mention of mentions.toSorted((a, b) => b.start - a.start)) {
-    const { start, end } = mention;
-    if (!Number.isInteger(start) || !Number.isInteger(end)) continue;
-    if (start < 0 || end > text.length || start >= end) continue;
-    if (text.slice(start, end) !== mention.text) continue;
-    text = `${text.slice(0, start)}${text.slice(end)}`;
-  }
-  const trimmed = text.trim();
-  return trimmed === "" ? undefined : trimmed;
-}
-
 interface UserPrompt {
   readonly task: string | undefined;
   readonly taskText: string | undefined;
@@ -143,7 +113,7 @@ function latestUserPrompt(messages: readonly SessionMessageInfo[]): UserPrompt |
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.type !== "user") continue;
-    const taskText = userPromptText(message);
+    const taskText = promptText(message);
     return { task: firstLine(taskText), taskText };
   }
   return undefined;

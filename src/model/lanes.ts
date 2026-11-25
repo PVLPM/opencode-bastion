@@ -7,6 +7,7 @@ import type {
 
 import { firstLine } from "./activity";
 import { delegationCalls } from "./delegations";
+import { promptText } from "./prompt";
 import type { AgentStatus, Handoff, Lane, LaneBlock, LanesView } from "./types";
 
 export interface LaneSession {
@@ -64,7 +65,7 @@ interface PromptDraft {
 
 function promptOf(message: SessionMessageInfo): PromptDraft | undefined {
   if (message.type === "user") {
-    return { id: message.id, text: nonEmpty(message.text), at: message.time.created };
+    return { id: message.id, text: promptText(message), at: message.time.created };
   }
   if (message.type === "synthetic") {
     return {
