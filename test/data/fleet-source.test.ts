@@ -585,7 +585,12 @@ describe("createFleetSource lines", () => {
     await withSource(fake.host, async (source) => {
       await flush();
       expect(fake.calls.diffCalls).toStrictEqual(["ses-root"]);
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 2, removed: 1, files: 1 });
+      expect(source.fleet()?.root.lines).toStrictEqual({
+        added: 2,
+        removed: 1,
+        files: 1,
+        truncated: false,
+      });
 
       fake.addMessage("ses-root", makeAssistant({ created: 150, completed: 150 }));
       await flush();
@@ -595,7 +600,12 @@ describe("createFleetSource lines", () => {
       fake.addMessage("ses-root", messageWithSnapshot(200));
       await flush();
       expect(fake.calls.diffCalls).toHaveLength(3);
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 5, removed: 1, files: 1 });
+      expect(source.fleet()?.root.lines).toStrictEqual({
+        added: 5,
+        removed: 1,
+        files: 1,
+        truncated: false,
+      });
     });
   });
 
@@ -612,7 +622,12 @@ describe("createFleetSource lines", () => {
 
     await withSource(fake.host, async (source) => {
       await flush();
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 2, removed: 1, files: 1 });
+      expect(source.fleet()?.root.lines).toStrictEqual({
+        added: 2,
+        removed: 1,
+        files: 1,
+        truncated: false,
+      });
     });
   });
 
@@ -636,7 +651,12 @@ describe("createFleetSource lines", () => {
 
     await withSource(fake.host, async (source) => {
       await flush();
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 2, removed: 1, files: 1 });
+      expect(source.fleet()?.root.lines).toStrictEqual({
+        added: 2,
+        removed: 1,
+        files: 1,
+        truncated: true,
+      });
     });
   });
 
@@ -649,7 +669,12 @@ describe("createFleetSource lines", () => {
 
     await withSource(fake.host, async (source) => {
       await flush();
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 0, removed: 0, files: 0 });
+      expect(source.fleet()?.root.lines).toStrictEqual({
+        added: 0,
+        removed: 0,
+        files: 0,
+        truncated: false,
+      });
     });
   });
 
@@ -671,7 +696,12 @@ describe("createFleetSource lines", () => {
     await withSource(fake.host, async (source) => {
       await flush();
       expect(fake.calls.diffCalls).toStrictEqual(["ses-root"]);
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 4, removed: 2, files: 1 });
+      expect(source.fleet()?.root.lines).toStrictEqual({
+        added: 4,
+        removed: 2,
+        files: 1,
+        truncated: false,
+      });
     });
   });
 
@@ -711,12 +741,22 @@ describe("createFleetSource lines", () => {
     await withSource(fake.host, async (source) => {
       await flush();
       expect(fake.calls.diffCalls).toStrictEqual(["ses-root"]);
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 3, removed: 2, files: 1 });
+      expect(source.fleet()?.root.lines).toStrictEqual({
+        added: 3,
+        removed: 2,
+        files: 1,
+        truncated: false,
+      });
 
       fake.addMessage("ses-root", messageWithSnapshot(200, []));
       await flush();
       expect(fake.calls.diffCalls).toStrictEqual(["ses-root"]);
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 3, removed: 2, files: 1 });
+      expect(source.fleet()?.root.lines).toStrictEqual({
+        added: 3,
+        removed: 2,
+        files: 1,
+        truncated: false,
+      });
     });
   });
 
@@ -742,7 +782,12 @@ describe("createFleetSource lines", () => {
       fake.addMessage("ses-root", makeAssistant({ created: 200 }));
       await flush();
       expect(fake.calls.diffCalls).toHaveLength(1);
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 1, removed: 1, files: 1 });
+      expect(source.fleet()?.root.lines).toStrictEqual({
+        added: 1,
+        removed: 1,
+        files: 1,
+        truncated: false,
+      });
     });
   });
 

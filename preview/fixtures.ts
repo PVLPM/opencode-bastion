@@ -46,10 +46,11 @@ const model = (
 
 const money = (usd: number, estimated = false): Money => ({ usd, estimated });
 
-const lines = (added: number, removed: number): LineStats => ({
+const lines = (added: number, removed: number, truncated = false): LineStats => ({
   added,
   removed,
   files: added === 0 && removed === 0 ? 0 : Math.ceil((added + removed) / 50),
+  truncated,
 });
 
 function usage(total: number): TokenStats {
@@ -493,7 +494,7 @@ export function longNamesFleet(): FleetView {
         startedAt: NOW - 96_000,
         cost: money(0.74, true),
         context: { used: 188_400, limit: 200_000 },
-        lines: lines(1_284, 318),
+        lines: lines(1_284, 318, true),
       }),
       agent({
         sessionID: "ses_child_token_audit",

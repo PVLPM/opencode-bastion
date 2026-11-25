@@ -98,7 +98,10 @@ describe("FleetPanel", () => {
 
   it("explains the line count's attribution without adding a tab stop", () => {
     const host = mountPanel({
-      fleet: testFleet(testRoot({ lines: { added: 12, removed: 3, files: 2 } }), []),
+      fleet: testFleet(
+        testRoot({ lines: { added: 12, removed: 3, files: 2, truncated: false } }),
+        [],
+      ),
       ui: {
         ...uiStub,
         Tooltip: (props) => <span data-tooltip={String(props.value)}>{props.children}</span>,
@@ -299,9 +302,38 @@ describe("FleetPanel", () => {
     expect(provider?.querySelector(".bn-dl__provider .bn-logo")).not.toBeNull();
   });
 
+  it("marks a truncated diff in the accessible name, tooltip and details", () => {
+    const host = mountPanel({
+      fleet: testFleet(testRoot(), [
+        runningChild({ lines: { added: 12, removed: 3, files: 2, truncated: true } }),
+      ]),
+      ui: {
+        ...uiStub,
+        Tooltip: (props) => <span data-tooltip={String(props.value)}>{props.children}</span>,
+      },
+    });
+    const counter = host.querySelector(".bn-lines");
+
+    expect(counter?.getAttribute("role")).toBe("img");
+    expect(counter?.getAttribute("aria-label")).toBe("12 lines added, 3 removed, 2 files, partial");
+    expect(counter?.closest("[data-tooltip]")?.getAttribute("data-tooltip")).toBe(
+      "Session file diff — partial: the directory listing was truncated. Overlapping edits can appear in more than one agent.",
+    );
+
+    host.querySelector<HTMLButtonElement>('[data-bn-card="ses_child_a"] [data-bn-more]')?.click();
+    const rows = [
+      ...(host.querySelector("#bn-details-ses_child_a")?.querySelectorAll(".bn-dl__row") ?? []),
+    ];
+    const changes = rows.find((row) => row.querySelector("dt")?.textContent === "Changes");
+
+    expect(changes?.querySelector(".bn-changes__partial")?.textContent).toBe("· partial");
+  });
+
   it("keeps a files-only diff out of the collapsed row and in the Changes details", () => {
     const host = mountPanel({
-      fleet: testFleet(testRoot(), [runningChild({ lines: { added: 0, removed: 0, files: 1 } })]),
+      fleet: testFleet(testRoot(), [
+        runningChild({ lines: { added: 0, removed: 0, files: 1, truncated: false } }),
+      ]),
     });
     const card = host.querySelector('[data-bn-card="ses_child_a"]');
 
@@ -317,8 +349,8 @@ describe("FleetPanel", () => {
   });
 
   it.each([
-    ["a files-only change", { added: 0, removed: 0, files: 1 }, "• 1 file"],
-    ["multiple files", { added: 12, removed: 3, files: 2 }, "• 2 files"],
+    ["a files-only change", { added: 0, removed: 0, files: 1, truncated: false }, "• 1 file"],
+    ["multiple files", { added: 12, removed: 3, files: 2, truncated: false }, "• 2 files"],
   ] as const)("shows %s in the Changes details", (_name, lines, expected) => {
     const host = mountPanel({
       fleet: testFleet(testRoot(), [runningChild({ lines })]),
@@ -384,7 +416,7 @@ describe("FleetPanel", () => {
         task: "Fix recovery regressions",
         activity: "Running tests…",
         effort: "medium",
-        lines: { added: 12, removed: 3, files: 2 },
+        lines: { added: 12, removed: 3, files: 2, truncated: false },
       }),
     ]);
     const card = mountPanel({ fleet }).querySelector('[data-bn-card="ses_child_a"]');

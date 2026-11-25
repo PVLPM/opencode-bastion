@@ -1,6 +1,6 @@
 import { Show, createSignal, type JSX } from "solid-js";
 
-import type { AgentView } from "../model/types";
+import type { AgentView, LineStats } from "../model/types";
 import type { Ui } from "@opencode/plugin/gui";
 import { ContextRing, contextSummary } from "./context-ring";
 import {
@@ -53,6 +53,17 @@ function effortLabel(effort: string): string {
 
 function detailsID(sessionID: string): string {
   return `bn-details-${encodeURIComponent(sessionID)}`;
+}
+
+function linesLabel(lines: LineStats): string {
+  const files = `${lines.files} ${lines.files === 1 ? "file" : "files"}`;
+  return `${lines.added} lines added, ${lines.removed} removed, ${files}${lines.truncated ? ", partial" : ""}`;
+}
+
+function diffTooltip(truncated: boolean): string {
+  return truncated
+    ? "Session file diff — partial: the directory listing was truncated. Overlapping edits can appear in more than one agent."
+    : "Session file diff — overlapping edits can appear in more than one agent.";
 }
 
 function Detail(props: { label: string; tone?: string; children: JSX.Element }) {
@@ -160,11 +171,8 @@ export function AgentCard(props: AgentCardProps) {
             <Show when={rowChanges()}>
               {(lines) => (
                 <span class="bn-metrics__tip bn-metrics__lines">
-                  <Tooltip value="Session file diff — overlapping edits can appear in more than one agent.">
-                    <span
-                      class="bn-lines"
-                      aria-label={`${lines().added} lines added, ${lines().removed} removed, ${lines().files} ${lines().files === 1 ? "file" : "files"}`}
-                    >
+                  <Tooltip value={diffTooltip(lines().truncated)}>
+                    <span class="bn-lines" role="img" aria-label={linesLabel(lines())}>
                       <span class="bn-lines__add">+{lines().added}</span>
                       <span class="bn-lines__del">−{lines().removed}</span>
                     </span>
@@ -321,6 +329,9 @@ export function AgentCard(props: AgentCardProps) {
                           </span>{" "}
                           {lines().files} {lines().files === 1 ? "file" : "files"}
                         </span>
+                        <Show when={lines().truncated}>
+                          <span class="bn-changes__partial">· partial</span>
+                        </Show>
                       </span>
                     </Detail>
                   )}

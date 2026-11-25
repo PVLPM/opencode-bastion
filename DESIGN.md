@@ -485,16 +485,18 @@ labels and axis, which is why the panel is usable at 320px.
   sessions only, so a child that also appears as a descendant is counted once. A
   session with any invalid counter has no token metric and makes the family total
   absent; zero is shown when zero is the measured value. The context ring still
-  measures the latest token-bearing assistant against its model's limit; it is not
-  the cumulative total.
+  measures the latest token-bearing
+  assistant against its model's limit; it is not the cumulative total.
 - **Changes**: the session's own cumulative diff, refreshed from the latest
   completed assistant turn. An explicit `files: []` describes only that turn, so
   the refresh is skipped and the last known diff is kept until a later completed
   turn changes files; only a scope or session change with no completed assistant
   clears it. The line counts and the file count come from the same diff: `files`
   counts distinct real paths, and a truncation sentinel (`more`) is not a file and
-  contributes no lines. It is not exact per-agent attribution when agents edit the
-  same files, and the card says so in a tooltip.
+  contributes no lines. A sentinel marks the diff partial: the card labels the
+  line count and the Changes row partial, and the tooltip explains that the
+  directory listing was truncated. It is not exact per-agent attribution when
+  agents edit the same files, and the card says so in a tooltip.
 - **Effort**: only the observed model variant, else absent.
 - **Status**: only the evidence table above; everything else is Unknown.
 - **Lanes**: only durable transcript evidence; past waiting is not drawn, and a

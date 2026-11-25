@@ -48,6 +48,8 @@ export interface LineStats {
   readonly removed: number;
   /** Distinct real files in the same session diff; truncation sentinels are excluded. */
   readonly files: number;
+  /** True when the diff carried a truncation sentinel, so the file list is partial. */
+  readonly truncated: boolean;
 }
 
 export interface AgentView {

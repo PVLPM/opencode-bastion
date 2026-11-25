@@ -678,6 +678,10 @@
   color: var(--bn-faint);
 }
 
+.bn-changes__partial {
+  color: var(--bn-faint);
+}
+
 /*
  * Narrow priority for row 3: at ≤330px the cost leaves the collapsed row (it
  * remains in the details); at ≤300px the +/- counts leave, the gaps tighten and

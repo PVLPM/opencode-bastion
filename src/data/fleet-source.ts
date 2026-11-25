@@ -180,9 +180,14 @@ function latestLineRefresh(messages: readonly SessionMessageInfo[]): LineRefresh
 
 function sumLines(files: readonly FileDiffInfo[]): LineStats {
   const real = new Map<string, FileDiffInfo>();
+  let truncated = false;
   for (const file of files) {
-    // `more` is a truncation sentinel, not a file; a repeated path is one file.
-    if (file.more === true || real.has(file.file)) continue;
+    if (file.more === true) {
+      truncated = true;
+      continue;
+    }
+    // A repeated path is one file; the sentinel above is not a file at all.
+    if (real.has(file.file)) continue;
     real.set(file.file, file);
   }
   let added = 0;
@@ -191,7 +196,7 @@ function sumLines(files: readonly FileDiffInfo[]): LineStats {
     added += file.additions;
     removed += file.deletions;
   }
-  return { added, removed, files: real.size };
+  return { added, removed, files: real.size, truncated };
 }
 
 function priceFor(

@@ -685,7 +685,7 @@ describe("buildFleet", () => {
   });
 
   it("passes line stats through", () => {
-    const lines = { added: 12, removed: 3, files: 1 };
+    const lines = { added: 12, removed: 3, files: 1, truncated: false };
     const fleet = buildFleet(fleetInput({ root: snapshot({ lines }) }));
 
     expect(fleet.root.lines).toStrictEqual(lines);
