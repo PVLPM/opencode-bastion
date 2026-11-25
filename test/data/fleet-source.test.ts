@@ -705,7 +705,7 @@ describe("createFleetSource lines", () => {
     });
   });
 
-  it("skips the diff when the completed assistant explicitly lists no files", async () => {
+  it("requests the cumulative diff on first load even when the latest turn reports no files", async () => {
     const fake = createFakeHost({
       routed: "ses-root",
       sessions: [
@@ -714,12 +714,31 @@ describe("createFleetSource lines", () => {
           messages: [messageWithSnapshot(100, [])],
         },
       ],
+      diff: () =>
+        Promise.resolve([
+          { file: "src/a.ts", patch: "", additions: 3, deletions: 2, status: "modified" },
+        ]),
     });
 
     await withSource(fake.host, async (source) => {
       await flush();
-      expect(fake.calls.diffCalls).toStrictEqual([]);
-      expect(source.fleet()?.root.lines).toBeUndefined();
+      expect(fake.calls.diffCalls).toStrictEqual(["ses-root"]);
+      expect(source.fleet()?.root.lines).toStrictEqual({
+        added: 3,
+        removed: 2,
+        files: 1,
+        truncated: false,
+      });
+
+      fake.addMessage("ses-root", messageWithSnapshot(200, []));
+      await flush();
+      expect(fake.calls.diffCalls).toStrictEqual(["ses-root"]);
+      expect(source.fleet()?.root.lines).toStrictEqual({
+        added: 3,
+        removed: 2,
+        files: 1,
+        truncated: false,
+      });
     });
   });
 

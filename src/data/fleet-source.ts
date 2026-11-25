@@ -459,8 +459,9 @@ export function createFleetSource(host: FleetHost): FleetSource {
         continue;
       }
       // An explicit empty file list describes this turn, not the session's
-      // cumulative diff; keep the last known stats until a later turn changes files.
-      if (!refresh.request) continue;
+      // cumulative diff. Once stats are known, keep them. Before they are known,
+      // the cumulative diff is the only source for earlier changes, so ask once.
+      if (!refresh.request && lines().get(key) !== undefined) continue;
       if (lineKeys.get(key) === refresh.at) continue;
       lineKeys.set(key, refresh.at);
       lineRequestSequence += 1;
