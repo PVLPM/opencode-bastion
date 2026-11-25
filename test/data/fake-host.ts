@@ -419,6 +419,7 @@ export function createFakeHost(options: FakeHostOptions = {}) {
     ) => {
       nextSyncs.set(sessionID, { messages, older });
     },
+    setMessageMore: setMore,
     failLoadMoreOnce: (sessionID: string) => {
       failLoadMores.add(sessionID);
     },

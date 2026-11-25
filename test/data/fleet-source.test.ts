@@ -631,6 +631,46 @@ describe("createFleetSource history", () => {
     });
   });
 
+  it("invalidates and replays a same-family route in one pass", async () => {
+    const window = historyMessages(20, 80);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        { info: makeSession({ id: "ses-root" }), messages: window },
+        { info: makeSession({ id: "ses-child", parentID: "ses-root", created: 2 }) },
+      ],
+      messagesOnSync: { "ses-root": window },
+      olderMessages: { "ses-root": historyMessages(20, 60) },
+    });
+    fake.setMessageMore("ses-root", true);
+    const releaseFirst = fake.holdNextMessageSync("ses-root");
+
+    await withSource(fake.host, async () => {
+      await flush();
+      expect(fake.calls.messageSyncs.filter((id) => id === "ses-root")).toHaveLength(1);
+      expect(fake.calls.messageLoadMores).toStrictEqual([]);
+
+      fake.setRouted("ses-child");
+      await flush();
+      const releaseSecond = fake.holdNextMessageSync("ses-root");
+      fake.setRouted("ses-root");
+      await flush();
+      expect(fake.calls.messageSyncs.filter((id) => id === "ses-root")).toHaveLength(2);
+
+      releaseFirst();
+      await flush();
+      expect(fake.calls.messageLoadMores).toStrictEqual([]);
+
+      releaseSecond();
+      await flush();
+      await flush();
+      expect(fake.calls.messageLoadMores).toStrictEqual([{ id: "ses-root", all: true }]);
+      expect(fake.data.session.message.list("ses-root").map((message) => message.id)).toStrictEqual(
+        historyMessages(40, 60).map((message) => message.id),
+      );
+    });
+  });
+
   it("backfills again after a reconnect that reset the store window", async () => {
     const all = historyMessages(400);
     const window = all.slice(-50);

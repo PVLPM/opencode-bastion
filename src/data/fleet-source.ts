@@ -235,6 +235,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
   const [historyRevision, setHistoryRevision] = createSignal(0);
 
   const synced = new Set<string>();
+  const requestTokens = new Map<string, object>();
   const messageSynced = new Set<string>();
   const historyFailures = new Set<string>();
   const lineKeys = new Map<string, number>();
@@ -289,6 +290,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
     activation += 1;
     abortBackfill();
     synced.clear();
+    requestTokens.clear();
     messageSynced.clear();
     historyFailures.clear();
     backfillRoot = false;
@@ -301,17 +303,26 @@ export function createFleetSource(host: FleetHost): FleetSource {
     setLines(new Map());
   }
 
+  function invalidateSync(key: string): void {
+    synced.delete(key);
+    requestTokens.delete(key);
+  }
+
   function syncOnce(key: string, run: () => Promise<void>, done?: () => void): void {
     if (synced.has(key)) return;
     synced.add(key);
+    const token = {};
+    requestTokens.set(key, token);
     const startedAt = activation;
     run().then(
       () => {
-        if (activation !== startedAt) return;
+        if (activation !== startedAt || requestTokens.get(key) !== token) return;
+        requestTokens.delete(key);
         done?.();
       },
       () => {
-        if (activation !== startedAt) return;
+        if (activation !== startedAt || requestTokens.get(key) !== token) return;
+        requestTokens.delete(key);
         synced.delete(key);
       },
     );
@@ -360,23 +371,6 @@ export function createFleetSource(host: FleetHost): FleetSource {
   });
 
   let trackedRouted: { readonly scope: string; readonly id: string } | undefined;
-  createEffect(() => {
-    const current = anchor();
-    if (current === undefined) return;
-    const scope = scopeKey(current);
-    const previous = trackedRouted;
-    trackedRouted = { scope, id: current.routedID };
-    // A route change re-syncs only the newly routed member; the rest of the
-    // family keeps its loaded history.
-    if (previous === undefined || previous.scope !== scope || previous.id === current.routedID) {
-      return;
-    }
-    abortBackfill(current.routedID);
-    historyFailures.delete(current.routedID);
-    synced.delete(messageSyncKey(scope, current.routedID));
-    messageSynced.delete(messageSyncKey(scope, current.routedID));
-    bumpHistory();
-  });
 
   createEffect(() => {
     const current = anchor();
@@ -384,6 +378,21 @@ export function createFleetSource(host: FleetHost): FleetSource {
     if (scope !== syncScope) {
       syncScope = scope;
       resetScope();
+    }
+    if (current === undefined || scope === undefined) {
+      trackedRouted = undefined;
+    } else {
+      // Invalidate before scheduling so a replayed route is not swallowed by
+      // the previous request's latch. A scope change already reset the state.
+      const previous = trackedRouted;
+      trackedRouted = { scope, id: current.routedID };
+      if (previous !== undefined && previous.scope === scope && previous.id !== current.routedID) {
+        abortBackfill(current.routedID);
+        historyFailures.delete(current.routedID);
+        invalidateSync(messageSyncKey(scope, current.routedID));
+        messageSynced.delete(messageSyncKey(scope, current.routedID));
+        bumpHistory();
+      }
     }
     if (current === undefined || scope === undefined || !current.connected) return;
     const data = current.data;
