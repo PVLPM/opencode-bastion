@@ -96,6 +96,19 @@ export function AgentCard(props: AgentCardProps) {
       ? lines
       : undefined;
   };
+  const contextSummaryText = () => {
+    const context = props.agent.context;
+    return context === undefined ? undefined : contextSummary(context);
+  };
+  // A group's divider is rendered with the group itself, so it can never
+  // separate the list from nothing.
+  const hasModelGroup = () =>
+    props.agent.model !== undefined ||
+    props.agent.cost !== undefined ||
+    props.agent.startedAt !== undefined ||
+    detailsChanges() !== undefined;
+  const hasUsageGroup = () =>
+    contextSummaryText() !== undefined || props.agent.tokens !== undefined;
 
   const open = () => {
     if (props.openable) props.onOpen(props.agent.sessionID);
@@ -245,98 +258,106 @@ export function AgentCard(props: AgentCardProps) {
           >
             <div class="bn-reveal__inner">
               <dl class="bn-card__details bn-dl" id={detailsID(props.agent.sessionID)}>
-                <Detail label="Agent">{props.agent.agent}</Detail>
-                <Show when={props.agent.title}>
-                  {(title) => <Detail label="Session">{title()}</Detail>}
-                </Show>
-                <Show when={props.agent.taskText}>
-                  {(task) => (
-                    <Detail label="Task">
-                      <span class="bn-dl__task">{task()}</span>
-                    </Detail>
-                  )}
-                </Show>
-                <Show when={activity()}>
-                  {(line) => (
-                    <Detail label="Now" tone={props.agent.status}>
-                      {line()}
-                    </Detail>
-                  )}
-                </Show>
-                <Show when={props.agent.model}>
-                  {(model) => (
-                    <>
-                      <Detail label="Provider">
-                        <span class="bn-dl__provider">
-                          <ProviderLogo providerID={model().providerID} />
-                          <span>{model().providerName}</span>
-                        </span>
+                <div class="bn-dl__group">
+                  <Detail label="Agent">{props.agent.agent}</Detail>
+                  <Show when={props.agent.title}>
+                    {(title) => <Detail label="Session">{title()}</Detail>}
+                  </Show>
+                  <Show when={props.agent.taskText}>
+                    {(task) => (
+                      <Detail label="Task">
+                        <span class="bn-dl__task">{task()}</span>
                       </Detail>
-                      <Detail label="Model">
-                        {model().name}
-                        <Show when={props.agent.effort}>
-                          {(effort) => ` ${effortLabel(effort())}`}
-                        </Show>
+                    )}
+                  </Show>
+                  <Show when={activity()}>
+                    {(line) => (
+                      <Detail label="Now" tone={props.agent.status}>
+                        {line()}
                       </Detail>
-                    </>
-                  )}
+                    )}
+                  </Show>
+                </div>
+                <Show when={hasModelGroup()}>
+                  <div class="bn-dl__group">
+                    <div class="bn-dl__rule" aria-hidden="true" />
+                    <Show when={props.agent.model}>
+                      {(model) => (
+                        <>
+                          <Detail label="Provider">
+                            <span class="bn-dl__provider">
+                              <ProviderLogo providerID={model().providerID} />
+                              <span>{model().providerName}</span>
+                            </span>
+                          </Detail>
+                          <Detail label="Model">
+                            {model().name}
+                            <Show when={props.agent.effort}>
+                              {(effort) => ` ${effortLabel(effort())}`}
+                            </Show>
+                          </Detail>
+                        </>
+                      )}
+                    </Show>
+                    <Show when={props.agent.cost}>
+                      {(cost) => (
+                        <Detail label="Cost">
+                          {formatMoney(cost())}
+                          <Show when={cost().estimated}> · estimated at list price</Show>
+                        </Detail>
+                      )}
+                    </Show>
+                    <Show when={props.agent.startedAt}>
+                      {(started) => (
+                        <Detail label="Time">
+                          {formatClock(started())}
+                          <Show when={props.agent.endedAt}>
+                            {(ended) => ` – ${formatClock(ended())}`}
+                          </Show>
+                          <Show when={elapsed()}>{(duration) => ` · ${duration()}`}</Show>
+                        </Detail>
+                      )}
+                    </Show>
+                    <Show when={detailsChanges()}>
+                      {(lines) => (
+                        <Detail label="Changes">
+                          <span class="bn-changes">
+                            <span class="bn-lines__add">+{lines().added}</span>
+                            <span class="bn-lines__del">−{lines().removed}</span>
+                            <span class="bn-changes__files">
+                              <span class="bn-changes__bullet" aria-hidden="true">
+                                •
+                              </span>{" "}
+                              {lines().files} {lines().files === 1 ? "file" : "files"}
+                            </span>
+                            <Show when={lines().truncated}>
+                              <span class="bn-changes__partial">· partial</span>
+                            </Show>
+                          </span>
+                        </Detail>
+                      )}
+                    </Show>
+                  </div>
                 </Show>
-                <Show when={props.agent.startedAt}>
-                  {(started) => (
-                    <Detail label="Time">
-                      {formatClock(started())}
-                      <Show when={props.agent.endedAt}>
-                        {(ended) => ` – ${formatClock(ended())}`}
-                      </Show>
-                      <Show when={elapsed()}>{(duration) => ` · ${duration()}`}</Show>
-                    </Detail>
-                  )}
-                </Show>
-                <Show when={props.agent.context}>
-                  {(context) => (
-                    <Show when={contextSummary(context())}>
+                <Show when={hasUsageGroup()}>
+                  <div class="bn-dl__group">
+                    <div class="bn-dl__rule" aria-hidden="true" />
+                    <Show when={contextSummaryText()}>
                       {(summary) => <Detail label="Context">{summary()}</Detail>}
                     </Show>
-                  )}
-                </Show>
-                <Show when={props.agent.tokens}>
-                  {(tokens) => (
-                    <>
-                      <Detail label="Total tokens">{formatTokens(tokens().total)}</Detail>
-                      <Detail label="Input">{formatTokens(tokens().input)}</Detail>
-                      <Detail label="Output">{formatTokens(tokens().output)}</Detail>
-                      <Detail label="Reasoning">{formatTokens(tokens().reasoning)}</Detail>
-                      <Detail label="Cache read">{formatTokens(tokens().cacheRead)}</Detail>
-                      <Detail label="Cache write">{formatTokens(tokens().cacheWrite)}</Detail>
-                    </>
-                  )}
-                </Show>
-                <Show when={props.agent.cost}>
-                  {(cost) => (
-                    <Detail label="Cost">
-                      {formatMoney(cost())}
-                      <Show when={cost().estimated}> · estimated at list price</Show>
-                    </Detail>
-                  )}
-                </Show>
-                <Show when={detailsChanges()}>
-                  {(lines) => (
-                    <Detail label="Changes">
-                      <span class="bn-changes">
-                        <span class="bn-lines__add">+{lines().added}</span>
-                        <span class="bn-lines__del">−{lines().removed}</span>
-                        <span class="bn-changes__files">
-                          <span class="bn-changes__bullet" aria-hidden="true">
-                            •
-                          </span>{" "}
-                          {lines().files} {lines().files === 1 ? "file" : "files"}
-                        </span>
-                        <Show when={lines().truncated}>
-                          <span class="bn-changes__partial">· partial</span>
-                        </Show>
-                      </span>
-                    </Detail>
-                  )}
+                    <Show when={props.agent.tokens}>
+                      {(tokens) => (
+                        <>
+                          <Detail label="Total tokens">{formatTokens(tokens().total)}</Detail>
+                          <Detail label="Input">{formatTokens(tokens().input)}</Detail>
+                          <Detail label="Output">{formatTokens(tokens().output)}</Detail>
+                          <Detail label="Reasoning">{formatTokens(tokens().reasoning)}</Detail>
+                          <Detail label="Cache read">{formatTokens(tokens().cacheRead)}</Detail>
+                          <Detail label="Cache write">{formatTokens(tokens().cacheWrite)}</Detail>
+                        </>
+                      )}
+                    </Show>
+                  </div>
                 </Show>
               </dl>
             </div>

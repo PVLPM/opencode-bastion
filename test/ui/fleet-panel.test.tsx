@@ -314,6 +314,93 @@ describe("FleetPanel", () => {
     expect(provider?.querySelector(".bn-dl__provider .bn-logo")).not.toBeNull();
   });
 
+  it("groups and orders the details, linked from the disclosure", () => {
+    const fleet = testFleet(testRoot(), [
+      runningChild({
+        task: "Fix it",
+        taskText: "Fix it",
+        cost: { usd: 0.3, estimated: false },
+        context: { used: 62_000, limit: 200_000 },
+        tokens: usage({
+          input: 1_200,
+          output: 300,
+          reasoning: 100,
+          cacheRead: 5_000,
+          cacheWrite: 400,
+          total: 7_000,
+        }),
+        lines: { added: 12, removed: 3, files: 2, truncated: false },
+      }),
+    ]);
+    const host = mountPanel({ fleet });
+    const more = host.querySelector<HTMLButtonElement>(
+      '[data-bn-card="ses_child_a"] [data-bn-more]',
+    );
+    more?.click();
+
+    const details = document.getElementById(more?.getAttribute("aria-controls") ?? "");
+
+    expect(details?.tagName).toBe("DL");
+    expect(details?.querySelectorAll(".bn-dl__row")).toHaveLength(16);
+    expect([...(details?.querySelectorAll("dt") ?? [])].map((label) => label.textContent)).toEqual([
+      "Agent",
+      "Session",
+      "Task",
+      "Now",
+      "Provider",
+      "Model",
+      "Cost",
+      "Time",
+      "Changes",
+      "Context",
+      "Total tokens",
+      "Input",
+      "Output",
+      "Reasoning",
+      "Cache read",
+      "Cache write",
+    ]);
+    expect(details?.querySelectorAll(".bn-dl__rule")).toHaveLength(2);
+  });
+
+  it.each([
+    [
+      "identity rows only",
+      {
+        model: undefined,
+        startedAt: undefined,
+        cost: undefined,
+        lines: undefined,
+        context: undefined,
+        tokens: undefined,
+      },
+      0,
+    ],
+    ["identity and model rows", { context: undefined, tokens: undefined }, 1],
+    [
+      "identity and usage rows",
+      {
+        model: undefined,
+        startedAt: undefined,
+        cost: undefined,
+        lines: undefined,
+        tokens: usage({ total: 7_000 }),
+      },
+      1,
+    ],
+    ["all three groups", { context: undefined, tokens: usage({ total: 7_000 }) }, 2],
+  ] as const)("draws a divider only between non-empty groups: %s", (_name, init, rules) => {
+    const host = mountPanel({ fleet: testFleet(testRoot(), [runningChild(init)]) });
+    host.querySelector<HTMLButtonElement>('[data-bn-card="ses_child_a"] [data-bn-more]')?.click();
+
+    const details = host.querySelector("#bn-details-ses_child_a");
+    const children = [...(details?.querySelectorAll(".bn-dl__row, .bn-dl__rule") ?? [])];
+
+    expect(children.filter((child) => child.classList.contains("bn-dl__rule"))).toHaveLength(rules);
+    expect(children[0]?.classList.contains("bn-dl__row")).toBe(true);
+    expect(children.at(-1)?.classList.contains("bn-dl__row")).toBe(true);
+  });
+
   it("marks a truncated diff in the accessible name, tooltip and details", () => {
     const host = mountPanel({
       fleet: testFleet(testRoot(), [

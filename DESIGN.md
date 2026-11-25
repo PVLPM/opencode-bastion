@@ -90,14 +90,19 @@ status mark and the disclosure sit above it so their tooltips and clicks work.
    disclosure button that rotates 180° when open. At wide card widths a 14px slot
    is reserved for the context ring even when the ring is absent.
 
-The disclosure reveals a definition list (72px label column) with Agent, Session,
-Task, Now, Provider, Model, Time, Context, Total tokens, Input, Output, Reasoning,
-Cache read, Cache write, Cost and Changes when each exists. The Provider row's
-mark and catalog display name come from the host's location provider store (the
-same list/sync adapter as agents and models); an unknown provider falls back to
-its id. The Agent row always carries the full agent name, since the badge may be
-truncated. The task shows the full available text, without a nested scrollbar. In
-the details, duration and cost are hidden only when unknown.
+The disclosure reveals a definition list (72px label column) in three groups:
+Agent, Session, Task and Now; then Provider, Model, Cost, Time and Changes; then
+Context, Total tokens, Input, Output, Reasoning, Cache read and Cache write. A
+row appears only when its value exists. A 1px `--bn-border` rule separates two
+neighboring groups only when both have rows; an empty group is skipped, so a
+sparse card never starts or ends with a divider. The rule keeps 8px above and
+6px below it, more than the 2px row gap, so the groups read as blocks rather than
+as extra rows. The Provider row's mark and catalog display name come from the
+host's location provider store (the same list/sync adapter as agents and models);
+an unknown provider falls back to its id. The Agent row always carries the full
+agent name, since the badge may be truncated. The task shows the full available
+text, without a nested scrollbar. In the details, duration and cost are hidden
+only when unknown.
 
 Activity wording is generated from the tool part. A tool-provided description
 wins; otherwise: `Reading <file>`, `Writing <file>`, `Editing <file>`,

@@ -827,6 +827,17 @@
   gap: 2px 8px;
 }
 
+.bn-dl__group {
+  display: contents;
+}
+
+/* Dividers sit inside their group, so an absent group takes its rule with it. */
+.bn-dl__rule {
+  grid-column: 1 / -1;
+  margin-block: 8px 6px;
+  border-top: 1px solid var(--bn-border);
+}
+
 .bn-dl__row {
   display: contents;
 }
