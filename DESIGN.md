@@ -171,7 +171,8 @@ Status evidence is fixed:
 
 A disconnected host cannot confirm a live state: Running and Needs you fall back
 to Unknown until the connection returns. Recorded cost, tokens, task and timeline
-stay visible.
+stay visible. A lane block that was live closes at the last observed assistant
+activity with status Unknown, and no end is invented at disconnect time.
 
 The composer pill appears only after the orchestrator delegates. It shows the
 agent count and the most actionable state: waiting (`warning`), then failed

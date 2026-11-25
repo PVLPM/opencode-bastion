@@ -513,6 +513,40 @@ describe("buildFleet", () => {
     expect(root.endedAt).toBe(2_000);
   });
 
+  it("closes a disconnected running block at the last observed assistant, not a stale idle", () => {
+    const root = buildFleet(
+      fleetInput({
+        connected: false,
+        root: snapshot({
+          running: true,
+          idle: 1_500,
+          messages: [makeAssistant({ completed: 2_000 })],
+        }),
+      }),
+    ).root;
+
+    expect(root.startedAt).toBe(1_000);
+    expect(root.endedAt).toBe(2_000);
+  });
+
+  it("leaves a disconnected running block open-ended when no assistant was seen", () => {
+    const root = buildFleet(
+      fleetInput({
+        connected: false,
+        root: snapshot({ running: true, idle: 1_500 }),
+      }),
+    ).root;
+
+    expect(root.endedAt).toBeUndefined();
+  });
+
+  it("returns a reconnected running session to an open interval", () => {
+    const root = buildFleet(fleetInput({ root: snapshot({ running: true, idle: 1_500 }) })).root;
+
+    expect(root.status).toBe("running");
+    expect(root.endedAt).toBeUndefined();
+  });
+
   it("keeps the pill reporting running while the root is done and a child runs", () => {
     const input = fleetInput({
       root: snapshot({ outcome: "succeeded", idle: 100 }),

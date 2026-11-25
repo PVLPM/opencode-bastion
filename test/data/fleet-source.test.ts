@@ -1,4 +1,4 @@
-import type { ModelRef, SessionMessageInfo } from "@opencode/client/promise";
+import type { ModelRef, PermissionRequest, SessionMessageInfo } from "@opencode/client/promise";
 import type { MountedSession } from "@opencode/plugin/gui";
 import { createRoot } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
@@ -1255,6 +1255,86 @@ describe("createFleetSource lanes", () => {
         status: "running",
       });
       expect(source.lanes()?.from).toBe(30);
+    });
+  });
+
+  it("keeps the lane block in step with a disconnected running card", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root", created: 1_000, idle: 1_500 }),
+          status: "running",
+          messages: [
+            makeUser(1_100, "Do the work"),
+            makeAssistant({ id: "root-a1", created: 1_100, completed: 1_150 }),
+          ],
+        },
+      ],
+    });
+
+    await withSource(fake.host, async (source) => {
+      const blocks = () => source.lanes()?.lanes[0]?.blocks;
+      await flush();
+      expect(source.fleet()?.root).toMatchObject({ status: "running", endedAt: undefined });
+      expect(blocks()).toHaveLength(1);
+      expect(blocks()?.[0]).toMatchObject({ start: 1_100, end: undefined, status: "running" });
+
+      fake.setConnected(false);
+      await flush();
+      expect(source.fleet()?.root).toMatchObject({ status: "unknown", endedAt: 1_150 });
+      expect(blocks()?.[0]).toMatchObject({ start: 1_100, end: 1_150, status: "unknown" });
+
+      fake.setConnected(true);
+      await flush();
+      expect(source.fleet()?.root).toMatchObject({ status: "running", endedAt: undefined });
+      expect(blocks()?.[0]).toMatchObject({ start: 1_100, end: undefined, status: "running" });
+    });
+  });
+
+  it("keeps a waiting lane block waiting while connected and unknown, not running, on disconnect", async () => {
+    const permission: PermissionRequest = {
+      id: "per-1",
+      sessionID: "ses-child",
+      action: "read",
+      resources: [],
+      metadata: {},
+    };
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        { info: makeSession({ id: "ses-root" }) },
+        {
+          info: makeSession({ id: "ses-child", parentID: "ses-root" }),
+          status: "idle",
+          permissions: [permission],
+          messages: [makeAssistant({ id: "child-a1", created: 100, completed: 150 })],
+        },
+      ],
+    });
+
+    await withSource(fake.host, async (source) => {
+      const blocks = () => source.lanes()?.lanes[1]?.blocks;
+      const card = () => {
+        const fleet = source.fleet();
+        return (
+          fleet?.active.find((agent) => agent.sessionID === "ses-child") ??
+          fleet?.inactive.find((agent) => agent.sessionID === "ses-child")
+        );
+      };
+      await flush();
+      expect(card()?.status).toBe("waiting");
+      expect(blocks()?.[0]).toMatchObject({ status: "waiting" });
+
+      fake.setConnected(false);
+      await flush();
+      expect(card()?.status).toBe("unknown");
+      expect(blocks()?.[0]).toMatchObject({ status: "unknown" });
+
+      fake.setConnected(true);
+      await flush();
+      expect(card()?.status).toBe("waiting");
+      expect(blocks()?.[0]).toMatchObject({ status: "waiting" });
     });
   });
 });

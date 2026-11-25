@@ -569,12 +569,17 @@ export function createFleetSource(host: FleetHost): FleetSource {
     for (const agent of [view.root, ...view.active, ...view.inactive]) {
       statuses.set(agent.sessionID, agent.status);
     }
-    const laneSession = (info: SessionInfo): LaneSession => ({
-      info,
-      running: data.session.status(info.id) === "running",
-      waiting: statuses.get(info.id) === "waiting",
-      messages: data.session.message.list(info.id),
-    });
+    const laneSession = (info: SessionInfo): LaneSession => {
+      // The lane follows the card statuses, which a disconnect demotes to
+      // Unknown; the raw store status cannot outrank that.
+      const status = statuses.get(info.id);
+      return {
+        info,
+        running: status === "running" || status === "waiting",
+        waiting: status === "waiting",
+        messages: data.session.message.list(info.id),
+      };
+    };
     return deriveLanes({
       root: laneSession(current.root),
       children: current.children.map(laneSession),

@@ -147,6 +147,20 @@ function latestAssistantModel(messages: readonly SessionMessageInfo[]): ModelRef
   return latestAssistant(messages)?.model;
 }
 
+/** The last assistant activity we observed before disconnect; never inferred from silence. */
+function lastObservedAssistantAt(
+  messages: readonly SessionMessageInfo[],
+  startedAt: number | undefined,
+): number | undefined {
+  const assistant = latestAssistant(messages);
+  for (const time of [assistant?.time.completed, assistant?.time.created]) {
+    if (time === undefined || !Number.isFinite(time)) continue;
+    if (startedAt !== undefined && time < startedAt) continue;
+    return time;
+  }
+  return undefined;
+}
+
 function agentView(
   input: FleetInput,
   snapshot: SessionSnapshot,
@@ -183,7 +197,9 @@ function agentView(
     task,
     taskText,
     startedAt: interval.startedAt,
-    endedAt: interval.endedAt,
+    endedAt: disconnected
+      ? lastObservedAssistantAt(snapshot.messages, interval.startedAt)
+      : interval.endedAt,
     tokens: sessionTokens(snapshot.info.tokens),
     cost: costs.get(snapshot.info.id)?.money,
     context: contextUsage(snapshot.messages, (ref) =>
