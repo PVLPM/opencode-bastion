@@ -84,16 +84,17 @@ status mark and the disclosure sit above it so their tooltips and clicks work.
    actually observed on the latest assistant message, displayed as `#Medium`; it
    is never inferred from the model name. Metrics are right-aligned with an 8px
    gap and tabular numbers. The token metric is the cumulative session total,
-   including cache reads and writes; the chevron is a 24×24 disclosure button that
-   rotates 180° when open. At wide card widths a 14px slot is reserved for the
-   context ring even when the ring is absent.
+   including reasoning and cache reads and writes; the chevron is a 24×24
+   disclosure button that rotates 180° when open. At wide card widths a 14px slot
+   is reserved for the context ring even when the ring is absent.
 
 The disclosure reveals a definition list (72px label column) with Agent, Session,
-Task, Now, Provider, Model, Time, Context, Total tokens, Input, Output,
+Task, Now, Provider, Model, Time, Context, Total tokens, Input, Output, Reasoning,
 Cache read, Cache write, Cost and Changes when each exists. The Provider row carries
 the provider mark and catalog display name. The Agent row always carries the full
 agent name, since the badge may be truncated. The task shows the full available
-text, without a nested scrollbar. Duration and cost are hidden only when unknown.
+text, without a nested scrollbar. In the details, duration and cost are hidden only
+when unknown.
 
 Activity wording is generated from the tool part. A tool-provided description
 wins; otherwise: `Reading <file>`, `Writing <file>`, `Editing <file>`,
@@ -446,10 +447,10 @@ gives way in this order:
 4. At ≤280px: hide the context ring (its value is still in the details and the
    tooltip).
 
-Duration never drops, and the model name gives way first. The agent badge is
-capped at 62% (48% below 300px) and the title ellipsizes; the task is capped at
-50%. The panel's vertical rhythm never depends on text length: every row is a
-fixed height.
+Duration never drops; after the cost, line counts and ring have given way, the
+model name ellipsizes. The agent badge is capped at 62% (48% below 300px) and the
+title ellipsizes; the task is capped at 50%. The panel's vertical rhythm never
+depends on text length: every row is a fixed height.
 
 The lanes region does not squeeze: in Detail it scrolls horizontally with sticky
 labels and axis, which is why the panel is usable at 320px.

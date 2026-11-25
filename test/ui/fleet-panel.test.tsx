@@ -226,7 +226,7 @@ describe("FleetPanel", () => {
     });
 
     const metric = host.querySelector(
-      '[data-tooltip="Total tokens this session has consumed, including cache reads and writes"]',
+      '[data-tooltip="Total tokens this session has consumed, including reasoning and cache reads and writes"]',
     );
     expect(metric?.textContent).toBe("12.8k tok");
     expect(host.querySelector(".bn-head__tokens")?.textContent).toBe("12.8k tok");
@@ -276,6 +276,7 @@ describe("FleetPanel", () => {
     expect(value("Total tokens")).toBe("7.0k");
     expect(value("Input")).toBe("1.2k");
     expect(value("Output")).toBe("300");
+    expect(value("Reasoning")).toBe("100");
     expect(value("Cache read")).toBe("5.0k");
     expect(value("Cache write")).toBe("400");
     expect(value("Cost")).toBe("$0.30");
@@ -296,6 +297,23 @@ describe("FleetPanel", () => {
     expect(labels.indexOf("Provider")).toBeLessThan(labels.indexOf("Model"));
     expect(provider?.querySelector(".bn-dl__provider")?.textContent?.trim()).toBe("Anthropic");
     expect(provider?.querySelector(".bn-dl__provider .bn-logo")).not.toBeNull();
+  });
+
+  it("keeps a files-only diff out of the collapsed row and in the Changes details", () => {
+    const host = mountPanel({
+      fleet: testFleet(testRoot(), [runningChild({ lines: { added: 0, removed: 0, files: 1 } })]),
+    });
+    const card = host.querySelector('[data-bn-card="ses_child_a"]');
+
+    expect(card?.querySelector(".bn-lines")).toBeNull();
+    card?.querySelector<HTMLButtonElement>("[data-bn-more]")?.click();
+
+    const rows = [
+      ...(host.querySelector("#bn-details-ses_child_a")?.querySelectorAll(".bn-dl__row") ?? []),
+    ];
+    const changes = rows.find((row) => row.querySelector("dt")?.textContent === "Changes");
+
+    expect(changes?.querySelector(".bn-changes__files")?.textContent?.trim()).toBe("• 1 file");
   });
 
   it.each([

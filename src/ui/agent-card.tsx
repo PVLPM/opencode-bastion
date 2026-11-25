@@ -75,7 +75,11 @@ export function AgentCard(props: AgentCardProps) {
   const elapsed = () =>
     formatElapsed(props.agent.startedAt, props.agent.endedAt, props.now, live());
   const activity = () => activityLine(props.agent);
-  const changed = () => {
+  const rowChanges = () => {
+    const lines = props.agent.lines;
+    return lines !== undefined && (lines.added > 0 || lines.removed > 0) ? lines : undefined;
+  };
+  const detailsChanges = () => {
     const lines = props.agent.lines;
     return lines !== undefined && (lines.added > 0 || lines.removed > 0 || lines.files > 0)
       ? lines
@@ -153,7 +157,7 @@ export function AgentCard(props: AgentCardProps) {
             )}
           </Show>
           <span class="bn-metrics">
-            <Show when={changed()}>
+            <Show when={rowChanges()}>
               {(lines) => (
                 <span class="bn-metrics__tip bn-metrics__lines">
                   <Tooltip value="Session file diff — overlapping edits can appear in more than one agent.">
@@ -171,7 +175,7 @@ export function AgentCard(props: AgentCardProps) {
             <Show when={elapsed()}>{(duration) => <span>{duration()}</span>}</Show>
             <Show when={props.agent.tokens}>
               {(tokens) => (
-                <Tooltip value="Total tokens this session has consumed, including cache reads and writes">
+                <Tooltip value="Total tokens this session has consumed, including reasoning and cache reads and writes">
                   <span class="bn-metrics__tip">{formatTokenMetric(tokens().total)}</span>
                 </Tooltip>
               )}
@@ -291,6 +295,7 @@ export function AgentCard(props: AgentCardProps) {
                       <Detail label="Total tokens">{formatTokens(tokens().total)}</Detail>
                       <Detail label="Input">{formatTokens(tokens().input)}</Detail>
                       <Detail label="Output">{formatTokens(tokens().output)}</Detail>
+                      <Detail label="Reasoning">{formatTokens(tokens().reasoning)}</Detail>
                       <Detail label="Cache read">{formatTokens(tokens().cacheRead)}</Detail>
                       <Detail label="Cache write">{formatTokens(tokens().cacheWrite)}</Detail>
                     </>
@@ -304,7 +309,7 @@ export function AgentCard(props: AgentCardProps) {
                     </Detail>
                   )}
                 </Show>
-                <Show when={changed()}>
+                <Show when={detailsChanges()}>
                   {(lines) => (
                     <Detail label="Changes">
                       <span class="bn-changes">

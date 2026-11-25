@@ -570,6 +570,10 @@
   align-items: center;
 }
 
+.bn-metrics__cost:empty {
+  display: none;
+}
+
 .bn-metrics__context {
   display: grid;
   width: 14px;
@@ -663,11 +667,10 @@
 }
 
 /*
- * Narrow priority for row 3, first to give way first: the +/- line counts
- * (they move to the details), then the metric gaps tighten, then the context
- * ring (its value is in the details too), then the effort truncates (it shrinks
- * a hundred times faster than the name). Only then does the model name
- * ellipsize. Cost and duration never drop; duration is the last to lose room.
+ * Narrow priority for row 3: at ≤330px the cost leaves the collapsed row (it
+ * remains in the details); at ≤300px the +/- counts leave, the gaps tighten and
+ * the effort shrinks; at ≤280px the ring leaves. Duration never drops; then the
+ * model name ellipsizes.
  */
 @container bn-card (max-width: 330px) {
   .bn-metrics__cost {
