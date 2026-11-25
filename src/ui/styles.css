@@ -143,9 +143,15 @@
   color: var(--bn-faint);
 }
 
-.bn-head__cost {
-  font-variant-numeric: tabular-nums;
+.bn-head__usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.bn-head__cost {
   color: var(--bn-text);
 }
 
@@ -559,6 +565,11 @@
   display: inline-flex;
 }
 
+.bn-metrics__cost {
+  display: inline-flex;
+  align-items: center;
+}
+
 .bn-metrics__context {
   display: grid;
   width: 14px;
@@ -643,6 +654,12 @@
  * a hundred times faster than the name). Only then does the model name
  * ellipsize. Cost and duration never drop; duration is the last to lose room.
  */
+@container bn-card (max-width: 330px) {
+  .bn-metrics__cost {
+    display: none;
+  }
+}
+
 @container bn-card (max-width: 300px) {
   .bn-badge {
     max-width: 48%;
@@ -769,7 +786,7 @@
 
 .bn-dl {
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-columns: 72px minmax(0, 1fr);
   gap: 2px 8px;
 }
 

@@ -505,6 +505,87 @@ describe("buildFleet", () => {
     expect(buildFleet(input).inactive[0]?.cost).toStrictEqual({ usd: 0, estimated: false });
   });
 
+  it("reports validated cumulative token stats for the root and children", () => {
+    const input = fleetInput({
+      root: snapshot({
+        tokens: makeTokens({ input: 10, output: 5, reasoning: 2, cacheRead: 3, cacheWrite: 4 }),
+      }),
+      children: [snapshot({ id: "ses-child", created: 1, running: true, tokens: makeTokens() })],
+    });
+    const fleet = buildFleet(input);
+
+    expect(fleet.root.tokens).toStrictEqual({
+      input: 10,
+      output: 5,
+      reasoning: 2,
+      cacheRead: 3,
+      cacheWrite: 4,
+      total: 24,
+    });
+    expect(fleet.active[0]?.tokens).toStrictEqual({
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      total: 0,
+    });
+    expect(fleet.totalTokens).toBe(24);
+  });
+
+  it("reports an exact zero token total rather than omitting it", () => {
+    const fleet = buildFleet(fleetInput({ root: snapshot({ tokens: makeTokens() }) }));
+
+    expect(fleet.root.tokens?.total).toBe(0);
+    expect(fleet.totalTokens).toBe(0);
+  });
+
+  it("counts each distinct session in the family token total once", () => {
+    const child = snapshot({
+      id: "ses-child",
+      created: 1,
+      running: true,
+      tokens: makeTokens({ input: 5 }),
+    });
+    const grandchild = snapshot({
+      id: "ses-grandchild",
+      parentID: "ses-child",
+      created: 2,
+      tokens: makeTokens({ input: 3 }),
+    });
+    const input = fleetInput({
+      root: snapshot({ id: "ses-root", tokens: makeTokens({ input: 10 }) }),
+      children: [child],
+      descendants: [child, grandchild],
+    });
+
+    expect(buildFleet(input).totalTokens).toBe(18);
+  });
+
+  const invalidTokenCases: readonly (readonly [string, TokenUsageInfo])[] = [
+    ["input is not finite", makeTokens({ input: Number.NaN })],
+    ["output is negative", makeTokens({ output: -1 })],
+    ["reasoning is infinite", makeTokens({ reasoning: Number.POSITIVE_INFINITY })],
+    ["cache read is not finite", makeTokens({ cacheRead: Number.NaN })],
+    ["cache write is negative", makeTokens({ cacheWrite: -1 })],
+  ];
+
+  it.each(invalidTokenCases)("leaves tokens unknown when %s", (_name, tokens) => {
+    const fleet = buildFleet(fleetInput({ root: snapshot({ tokens }) }));
+
+    expect(fleet.root.tokens).toBeUndefined();
+    expect(fleet.totalTokens).toBeUndefined();
+  });
+
+  it("leaves the family total unknown when a descendant's tokens are invalid", () => {
+    const input = fleetInput({
+      root: snapshot({ tokens: makeTokens() }),
+      descendants: [snapshot({ id: "ses-child", created: 1, tokens: makeTokens({ input: -1 }) })],
+    });
+
+    expect(buildFleet(input).totalTokens).toBeUndefined();
+  });
+
   it("never reprices a reported cost", () => {
     const input = fleetInput({
       root: snapshot({

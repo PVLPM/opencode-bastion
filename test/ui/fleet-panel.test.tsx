@@ -2,7 +2,7 @@ import { createSignal } from "solid-js";
 import { render } from "solid-js/web";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { Beam, FleetView } from "../../src/model/types";
+import type { Beam, FleetView, TokenStats } from "../../src/model/types";
 import type { FleetPanelProps } from "../../src/ui/fleet-panel";
 import { FleetPanel } from "../../src/ui/fleet-panel";
 import { TEST_NOW, runningChild, testFleet, testRoot, waitingChild } from "./fixtures";
@@ -43,6 +43,18 @@ function mountPanel(
 
 function sampleFleet(): FleetView {
   return testFleet(testRoot(), [runningChild(), waitingChild()]);
+}
+
+function usage(values: Partial<TokenStats> = {}): TokenStats {
+  return {
+    input: 0,
+    output: 0,
+    reasoning: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    total: 0,
+    ...values,
+  };
 }
 
 function fleetWithFinished(): FleetView {
@@ -194,6 +206,79 @@ describe("FleetPanel", () => {
     expect(host.textContent).toContain("1 running");
     expect(host.textContent).toContain("needs you");
     expect(host.textContent).toContain("$1.20");
+  });
+
+  it("shows the cumulative token total on row three and in the header", () => {
+    const tokens = usage({
+      input: 10_000,
+      output: 1_400,
+      reasoning: 400,
+      cacheRead: 1_000,
+      total: 12_800,
+    });
+    const fleet = testFleet(testRoot({ tokens }), [], 12_800);
+    const host = mountPanel({
+      fleet,
+      ui: {
+        ...uiStub,
+        Tooltip: (props) => <span data-tooltip={String(props.value)}>{props.children}</span>,
+      },
+    });
+
+    const metric = host.querySelector(
+      '[data-tooltip="Total tokens this session has consumed, including cache reads and writes"]',
+    );
+    expect(metric?.textContent).toBe("12.8k tok");
+    expect(host.querySelector(".bn-head__tokens")?.textContent).toBe("12.8k tok");
+    expect(host.querySelector(".bn-head__tokens")?.getAttribute("title")).toBe(
+      "Known family token total",
+    );
+  });
+
+  it("shows a measured zero token total", () => {
+    const fleet = testFleet(testRoot({ tokens: usage() }), [], 0);
+    const host = mountPanel({ fleet });
+
+    expect(host.querySelector(".bn-row--meta")?.textContent).toContain("0 tok");
+    expect(host.querySelector(".bn-head__tokens")?.textContent).toBe("0 tok");
+  });
+
+  it("lists cumulative usage in the details and keeps the cost", () => {
+    const fleet = testFleet(
+      testRoot(),
+      [
+        runningChild({
+          tokens: usage({
+            input: 1_200,
+            output: 300,
+            reasoning: 100,
+            cacheRead: 5_000,
+            cacheWrite: 400,
+            total: 7_000,
+          }),
+          cost: { usd: 0.3, estimated: false },
+        }),
+      ],
+      7_000,
+    );
+    const host = mountPanel({ fleet });
+    const more = host.querySelector<HTMLButtonElement>(
+      '[data-bn-card="ses_child_a"] [data-bn-more]',
+    );
+    more?.click();
+
+    const details = host.querySelector("#bn-details-ses_child_a");
+    const rows = [...(details?.querySelectorAll(".bn-dl__row") ?? [])];
+    const value = (label: string) =>
+      rows.find((row) => row.querySelector("dt")?.textContent === label)?.querySelector("dd")
+        ?.textContent;
+
+    expect(value("Total tokens")).toBe("7.0k");
+    expect(value("Input")).toBe("1.2k");
+    expect(value("Output")).toBe("300");
+    expect(value("Cache read")).toBe("5.0k");
+    expect(value("Cache write")).toBe("400");
+    expect(value("Cost")).toBe("$0.30");
   });
 
   it("shows the empty state without a fleet", () => {

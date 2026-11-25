@@ -9,6 +9,7 @@ import type {
   LineStats,
   ModelLabel,
   Money,
+  TokenStats,
 } from "../src/model/types";
 
 const NOW = Date.now();
@@ -29,6 +30,24 @@ const money = (usd: number, estimated = false): Money => ({ usd, estimated });
 
 const lines = (added: number, removed: number): LineStats => ({ added, removed });
 
+function usage(total: number): TokenStats {
+  const input = Math.round(total * 0.35);
+  const output = Math.round(total * 0.15);
+  const reasoning = Math.round(total * 0.05);
+  const cacheRead = Math.round(total * 0.35);
+  return {
+    input,
+    output,
+    reasoning,
+    cacheRead,
+    cacheWrite: total - input - output - reasoning - cacheRead,
+    total,
+  };
+}
+
+const usageFor = (cost: Money | undefined): TokenStats =>
+  usage(cost === undefined ? 0 : Math.max(1, Math.round(cost.usd * 48_000)));
+
 interface AgentInit extends Partial<AgentView> {
   readonly sessionID: string;
 }
@@ -47,6 +66,7 @@ function agent(init: AgentInit): AgentView {
     taskText: init.task,
     startedAt: undefined,
     endedAt: undefined,
+    tokens: init.tokens ?? usageFor(init.cost),
     cost: undefined,
     context: undefined,
     lines: undefined,
@@ -69,6 +89,17 @@ function totalCost(members: readonly AgentView[]): Money | undefined {
   return known ? { usd, estimated } : undefined;
 }
 
+function totalTokens(members: readonly AgentView[]): number | undefined {
+  let total = 0;
+  let known = false;
+  for (const member of members) {
+    if (member.tokens === undefined) continue;
+    known = true;
+    total += member.tokens.total;
+  }
+  return known ? total : undefined;
+}
+
 function fleet(root: AgentView, children: readonly AgentView[]): FleetView {
   const active: AgentView[] = [];
   const inactive: AgentView[] = [];
@@ -83,6 +114,7 @@ function fleet(root: AgentView, children: readonly AgentView[]): FleetView {
     active,
     inactive,
     totalCost: totalCost([root, ...children]),
+    totalTokens: totalTokens([root, ...children]),
   };
 }
 

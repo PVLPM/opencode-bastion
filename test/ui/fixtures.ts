@@ -20,6 +20,7 @@ function testAgent(init: AgentInit): AgentView {
     taskText: init.task,
     startedAt: TEST_NOW - 10_000,
     endedAt: undefined,
+    tokens: undefined,
     cost: undefined,
     context: undefined,
     lines: undefined,
@@ -39,14 +40,24 @@ export function testRoot(init: Partial<AgentView> = {}): AgentView {
   });
 }
 
-export function testFleet(root: AgentView, children: readonly AgentView[]): FleetView {
+export function testFleet(
+  root: AgentView,
+  children: readonly AgentView[],
+  totalTokens?: number,
+): FleetView {
   const active: AgentView[] = [];
   const inactive: AgentView[] = [];
   for (const child of children) {
     if (child.status === "running" || child.status === "waiting") active.push(child);
     else inactive.push(child);
   }
-  return { root, active, inactive, totalCost: { usd: 1.2, estimated: false } };
+  return {
+    root,
+    active,
+    inactive,
+    totalCost: { usd: 1.2, estimated: false },
+    totalTokens,
+  };
 }
 
 export function runningChild(init: Partial<AgentView> = {}): AgentView {

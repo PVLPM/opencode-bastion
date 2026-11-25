@@ -5,6 +5,7 @@ import {
   formatDuration,
   formatElapsed,
   formatMoney,
+  formatTokenMetric,
   formatTokens,
 } from "../../src/model/format";
 import type { Money } from "../../src/model/types";
@@ -115,6 +116,18 @@ describe("formatMoney", () => {
 describe("formatTokens", () => {
   it.each(tokenCases)("formats %i as %s", (count, expected) => {
     expect(formatTokens(count)).toBe(expected);
+  });
+});
+
+describe("formatTokenMetric", () => {
+  const metricCases: readonly (readonly [number, string])[] = [
+    [0, "0 tok"],
+    [12_400, "12.4k tok"],
+    [1_200_000, "1.2M tok"],
+  ];
+
+  it.each(metricCases)("formats %i as %s", (count, expected) => {
+    expect(formatTokenMetric(count)).toBe(expected);
   });
 });
 

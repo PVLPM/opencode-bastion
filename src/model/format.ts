@@ -45,6 +45,11 @@ export function formatTokens(count: number): string {
   return String(count);
 }
 
+/** The compact metric form; `formatTokens` stays for the context ring's tooltip. */
+export function formatTokenMetric(count: number): string {
+  return `${formatTokens(count)} tok`;
+}
+
 export function formatClock(timestamp: number): string {
   if (!Number.isFinite(timestamp)) return "";
   return clock.format(new Date(timestamp));

@@ -3,7 +3,13 @@ import { Show, createSignal, type JSX } from "solid-js";
 import type { AgentView } from "../model/types";
 import type { Ui } from "@opencode/plugin/gui";
 import { ContextRing, contextSummary } from "./context-ring";
-import { formatClock, formatElapsed, formatMoney } from "../model/format";
+import {
+  formatClock,
+  formatElapsed,
+  formatMoney,
+  formatTokenMetric,
+  formatTokens,
+} from "../model/format";
 import { ProviderLogo } from "./provider-logo";
 import { RollingMoney } from "./rolling-money";
 import { StatusMark } from "./status-mark";
@@ -161,18 +167,27 @@ export function AgentCard(props: AgentCardProps) {
               )}
             </Show>
             <Show when={elapsed()}>{(duration) => <span>{duration()}</span>}</Show>
-            <Show when={props.agent.cost}>
-              {(cost) => {
-                const amount = <RollingMoney value={cost()} />;
-                return (
-                  <Show when={cost().estimated} fallback={amount}>
-                    <Tooltip value="Estimated at API list price">
-                      <span class="bn-metrics__tip">{amount}</span>
-                    </Tooltip>
-                  </Show>
-                );
-              }}
+            <Show when={props.agent.tokens}>
+              {(tokens) => (
+                <Tooltip value="Total tokens this session has consumed, including cache reads and writes">
+                  <span class="bn-metrics__tip">{formatTokenMetric(tokens().total)}</span>
+                </Tooltip>
+              )}
             </Show>
+            <span class="bn-metrics__cost">
+              <Show when={props.agent.cost}>
+                {(cost) => {
+                  const amount = <RollingMoney value={cost()} />;
+                  return (
+                    <Show when={cost().estimated} fallback={amount}>
+                      <Tooltip value="Estimated at API list price">
+                        <span class="bn-metrics__tip">{amount}</span>
+                      </Tooltip>
+                    </Show>
+                  );
+                }}
+              </Show>
+            </span>
             <span class="bn-metrics__context">
               <Show when={props.agent.context}>
                 {(context) => (
@@ -258,6 +273,17 @@ export function AgentCard(props: AgentCardProps) {
                     <Show when={contextSummary(context())}>
                       {(summary) => <Detail label="Context">{summary()}</Detail>}
                     </Show>
+                  )}
+                </Show>
+                <Show when={props.agent.tokens}>
+                  {(tokens) => (
+                    <>
+                      <Detail label="Total tokens">{formatTokens(tokens().total)}</Detail>
+                      <Detail label="Input">{formatTokens(tokens().input)}</Detail>
+                      <Detail label="Output">{formatTokens(tokens().output)}</Detail>
+                      <Detail label="Cache read">{formatTokens(tokens().cacheRead)}</Detail>
+                      <Detail label="Cache write">{formatTokens(tokens().cacheWrite)}</Detail>
+                    </>
                   )}
                 </Show>
                 <Show when={props.agent.cost}>

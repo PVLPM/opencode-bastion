@@ -9,7 +9,7 @@ import type {
 import { deriveActivity, firstLine, jsonText } from "./activity";
 import { delegations } from "./delegations";
 import { deriveStatus, latestAssistant } from "./status";
-import type { AgentView, FleetView, LineStats, ModelLabel, Money } from "./types";
+import type { AgentView, FleetView, LineStats, ModelLabel, Money, TokenStats } from "./types";
 import { contextUsage, sessionInterval, tokenTotal } from "./usage";
 
 export interface SessionSnapshot {
@@ -72,6 +72,28 @@ function familyTotal(
     estimated = true;
   }
   return { usd, estimated };
+}
+
+/** A counter that is absent or nonsensical leaves the whole stat unknown. */
+function sessionTokens(tokens: TokenUsageInfo): TokenStats | undefined {
+  const { input, output, reasoning } = tokens;
+  const { read, write } = tokens.cache;
+  const components = [input, output, reasoning, read, write];
+  if (components.some((value) => !Number.isFinite(value) || value < 0)) return undefined;
+  const total = tokenTotal(tokens);
+  if (!Number.isFinite(total) || total < 0) return undefined;
+  return { input, output, reasoning, cacheRead: read, cacheWrite: write, total };
+}
+
+/** The family total is only claimed when every distinct member has valid usage. */
+function familyTokens(members: ReadonlyMap<string, SessionSnapshot>): number | undefined {
+  let total = 0;
+  for (const snapshot of members.values()) {
+    const tokens = sessionTokens(snapshot.info.tokens);
+    if (tokens === undefined) return undefined;
+    total += tokens.total;
+  }
+  return Number.isFinite(total) ? total : undefined;
 }
 
 /** The desktop stores child titles as `<description> (@<agent> subagent)`. */
@@ -167,6 +189,7 @@ function agentView(
     taskText,
     startedAt: interval.startedAt,
     endedAt: interval.endedAt,
+    tokens: sessionTokens(snapshot.info.tokens),
     cost: costs.get(snapshot.info.id),
     context: contextUsage(snapshot.messages, (ref) =>
       input.contextLimit(snapshot.info.location, ref),
@@ -215,5 +238,6 @@ export function buildFleet(input: FleetInput): FleetView {
     active,
     inactive,
     totalCost: familyTotal(input, members, costs),
+    totalTokens: familyTokens(members),
   };
 }

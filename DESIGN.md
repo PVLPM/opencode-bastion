@@ -78,20 +78,21 @@ status mark and the disclosure sit above it so their tooltips and clicks work.
    activity is the live, concise tool description. The `•` separator only appears
    when both exist. The task is capped at 50%; the ticker takes the rest and
    clips.
-3. **Meta** — `[logo] Model #Effort ……… lines duration cost context-ring chevron`.
+3. **Meta** — `[logo] Model #Effort ……… lines duration tokens cost context-ring chevron`.
    The provider mark sits in a 14px optical box, 4px from the model name; a
    provider with no vendored mark shows no logo. Effort is the model variant
    actually observed on the latest assistant message, displayed as `#Medium`; it
    is never inferred from the model name. Metrics are right-aligned with an 8px
-   gap, tabular numbers, and the chevron is a 24×24 disclosure button that rotates
-   180° when open. At wide card widths a 14px slot is reserved for the context
-   ring even when the ring is absent.
+   gap and tabular numbers. The token metric is the cumulative session total,
+   including cache reads and writes; the chevron is a 24×24 disclosure button that
+   rotates 180° when open. At wide card widths a 14px slot is reserved for the
+   context ring even when the ring is absent.
 
-The disclosure reveals a definition list (56px label column) with Agent, Session,
-Task, Now, Model, Time, Context, Cost and Lines when each exists. The Agent row
-always carries the full agent name, since the badge may be truncated. The task
-shows the full available text, without a nested scrollbar. Duration and cost are
-hidden only when unknown.
+The disclosure reveals a definition list (72px label column) with Agent, Session,
+Task, Now, Model, Time, Context, Total tokens, Input, Output, Cache read, Cache
+write, Cost and Lines when each exists. The Agent row always carries the full
+agent name, since the badge may be truncated. The task shows the full available
+text, without a nested scrollbar. Duration and cost are hidden only when unknown.
 
 Activity wording is generated from the tool part. A tool-provided description
 wins; otherwise: `Reading <file>`, `Writing <file>`, `Editing <file>`,
@@ -436,15 +437,16 @@ Layout is unchanged. Reduced motion is not a different layout.
 The card is a container (`container: bn-card / inline-size`); its third row
 gives way in this order:
 
-1. At ≤300px: hide the `+added −removed` counts (they remain in the details),
+1. At ≤330px: hide the cost (it remains in the details).
+2. At ≤300px: hide the `+added −removed` counts (they remain in the details),
    tighten the 10px row gap and 8px metric gap to 6px, and shrink the effort
    label to a 3ch minimum.
-2. Only then does the model name ellipsize.
-3. At ≤280px: hide the context ring (its value is still in the details and the
+3. Only then does the model name ellipsize.
+4. At ≤280px: hide the context ring (its value is still in the details and the
    tooltip).
 
-Cost and duration never drop, and the model name gives way first. The agent badge
-is capped at 62% (48% below 300px) and the title ellipsizes; the task is capped at
+Duration never drops, and the model name gives way first. The agent badge is
+capped at 62% (48% below 300px) and the title ellipsizes; the task is capped at
 50%. The panel's vertical rhythm never depends on text length: every row is a
 fixed height.
 
@@ -469,6 +471,14 @@ labels and axis, which is why the panel is usable at 320px.
 - **Context**: the latest token-bearing assistant over the context limit of the
   model that produced those tokens. No limit, zero limit or a completed
   compaction means no ring.
+- **Tokens**: cumulative per-session usage as OpenCode reports it. The total is
+  non-cached input plus output, reasoning and cache reads/writes, each counted
+  once; cache tokens are not added to input again. The family total sums distinct
+  sessions only, so a child that also appears as a descendant is counted once. A
+  session with any invalid counter has no token metric and makes the family total
+  absent; zero is shown when zero is the measured value. The context ring still
+  measures the latest token-bearing assistant against its model's limit; it is not
+  the cumulative total.
 - **Lines**: the session's own cumulative diff, refreshed from the latest
   completed assistant turn. An explicit `files: []` describes only that turn, so
   the refresh is skipped and the last known diff is kept until a later completed

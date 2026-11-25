@@ -70,11 +70,14 @@ Cards:
 - [ ] The `•` separator appears only when both task and activity exist.
 - [ ] Live cards are raised; finished cards are sunken with a hairline; the routed
       card has its inset ring; hover and press do not move the layout.
-- [ ] The metrics order is lines, duration, cost, context ring, chevron, and
-      `+added −removed` is hidden only where the details still carry it.
-- [ ] At ≤300px the line counts go, then the gap tightens and effort shrinks; at
-      ≤280px the ring goes. Cost and duration remain. Below 300px the badge is
-      capped at 48%; the details always carry the full Agent row.
+- [ ] The metrics order is lines, duration, total tokens, cost, context ring,
+      chevron; `+added −removed` and cost are hidden only where the details still
+      carry them.
+- [ ] At ≤330px the cost goes, at ≤300px the line counts go and the gap tightens
+      while effort shrinks, and at ≤280px the ring goes. Duration remains. Below
+      300px the badge is capped at 48%; the details always carry the full Agent
+      row.
+- [ ] Details carry the full task and the cumulative token rows.
 - [ ] The provider logo sits in a 14px optical box 4px from the model name; wide
       layouts reserve the context-ring slot.
 - [ ] Clicking the card body opens the session; clicking the disclosure expands

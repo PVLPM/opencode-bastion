@@ -26,6 +26,16 @@ export interface Money {
   readonly estimated: boolean;
 }
 
+export interface TokenStats {
+  readonly input: number;
+  readonly output: number;
+  readonly reasoning: number;
+  readonly cacheRead: number;
+  readonly cacheWrite: number;
+  /** Non-cached input plus output, reasoning and cache reads/writes, each once. */
+  readonly total: number;
+}
+
 export interface ContextUsage {
   readonly used: number;
   readonly limit: number;
@@ -61,6 +71,8 @@ export interface AgentView {
   readonly startedAt: number | undefined;
   /** Set once the session is idle. */
   readonly endedAt: number | undefined;
+  /** Cumulative usage reported by the session, never recomputed from turns. */
+  readonly tokens: TokenStats | undefined;
   readonly cost: Money | undefined;
   readonly context: ContextUsage | undefined;
   readonly lines: LineStats | undefined;
@@ -77,6 +89,8 @@ export interface FleetView {
   readonly inactive: readonly AgentView[];
   /** Whole-family cost (root plus every descendant), never summed twice. */
   readonly totalCost: Money | undefined;
+  /** Known cumulative tokens over the same distinct members; absent if any is invalid. */
+  readonly totalTokens: number | undefined;
 }
 
 /**

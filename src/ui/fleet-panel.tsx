@@ -1,5 +1,6 @@
 import { For, Show, createMemo, createSignal, type Accessor } from "solid-js";
 
+import { formatTokenMetric } from "../model/format";
 import type { AgentView, Beam, FleetView, LanesView } from "../model/types";
 import type { Ui } from "@opencode/plugin/gui";
 import { AgentCard } from "./agent-card";
@@ -69,6 +70,10 @@ export function FleetPanel(props: FleetPanelProps) {
 
   const running = () => count(agents(), "running");
   const waiting = () => count(agents(), "waiting");
+  const familyTokens = createMemo(() => {
+    const tokens = props.fleet?.totalTokens;
+    return tokens === undefined ? undefined : formatTokenMetric(tokens);
+  });
 
   const jumpToWaiting = () => {
     const cards = panel()?.querySelectorAll("[data-bn-waiting] [data-bn-open]");
@@ -120,13 +125,22 @@ export function FleetPanel(props: FleetPanelProps) {
                   {waiting()} {waiting() === 1 ? "needs" : "need"} you
                 </button>
               </Show>
-              <Show when={fleet().totalCost}>
-                {(cost) => (
-                  <span class="bn-head__cost" title="Known family cost">
-                    <RollingMoney value={cost()} />
-                  </span>
-                )}
-              </Show>
+              <span class="bn-head__usage">
+                <Show when={familyTokens()}>
+                  {(tokens) => (
+                    <span class="bn-head__tokens" title="Known family token total">
+                      {tokens()}
+                    </span>
+                  )}
+                </Show>
+                <Show when={fleet().totalCost}>
+                  {(cost) => (
+                    <span class="bn-head__cost" title="Known family cost">
+                      <RollingMoney value={cost()} />
+                    </span>
+                  )}
+                </Show>
+              </span>
             </header>
 
             <div class="bn-cards">
