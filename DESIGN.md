@@ -80,11 +80,12 @@ status mark and the disclosure sit above it so their tooltips and clicks work.
    clips.
 3. **Meta** — `[logo] Model Effort ……… lines duration tokens cost context-ring chevron`.
    The provider mark sits in a 14px optical box, 4px from the model name; a
-   provider with no vendored mark shows no logo. Effort is the model variant
-   actually observed on the latest assistant message, displayed as secondary
-   text `Medium`; it is never inferred from the model name. Metrics are
-   right-aligned with an 8px
-   gap and tabular numbers. The token metric is the cumulative session total,
+   provider with no vendored mark shows no logo. The model name uses the base
+   text color and the effort the panel's faint tone, so the variant reads as
+   secondary; it stays on the same row, 4px away, as unprefixed `Medium`. Effort
+   is the model variant actually observed on the latest assistant message, never
+   inferred from the model name. Metrics are right-aligned with an 8px gap and
+   tabular numbers. The token metric is the cumulative session total,
    including reasoning and cache reads and writes; the chevron is a 24×24
    disclosure button that rotates 180° when open. At wide card widths a 14px slot
    is reserved for the context ring even when the ring is absent.
