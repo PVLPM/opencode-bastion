@@ -1,6 +1,6 @@
 {
   "name": "opencode-bastion",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Agent Fleet for OpenCode Desktop: live status, activity, cost and context of the orchestrator and its subagents.",
   "license": "MIT",
   "type": "module",
