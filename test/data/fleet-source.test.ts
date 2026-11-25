@@ -306,7 +306,7 @@ describe("createFleetSource syncing", () => {
     });
   });
 
-  it("syncs each location's provider catalog and labels models with its name", async () => {
+  it("loads each location's provider catalog on sync and labels models with its name", async () => {
     const fake = createFakeHost({
       routed: "ses-root",
       sessions: [
@@ -328,7 +328,7 @@ describe("createFleetSource syncing", () => {
           status: "running",
         },
       ],
-      providersByLocation: {
+      providersOnSync: {
         "C:\\root": [makeProvider({ id: "p", name: "Root Provider" })],
         "C:\\child": [makeProvider({ id: "p", name: "Child Provider" })],
       },
@@ -339,7 +339,7 @@ describe("createFleetSource syncing", () => {
 
       expect(source.fleet()?.root.model?.providerName).toBe("Root Provider");
       expect(source.fleet()?.active[0]?.model?.providerName).toBe("Child Provider");
-      expect([...new Set(fake.calls.providerSyncs)]).toHaveLength(2);
+      expect(fake.calls.providerSyncs).toStrictEqual(["C:\\root", "C:\\child"]);
     });
   });
 

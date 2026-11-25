@@ -90,11 +90,12 @@ status mark and the disclosure sit above it so their tooltips and clicks work.
 
 The disclosure reveals a definition list (72px label column) with Agent, Session,
 Task, Now, Provider, Model, Time, Context, Total tokens, Input, Output, Reasoning,
-Cache read, Cache write, Cost and Changes when each exists. The Provider row carries
-the provider mark and catalog display name. The Agent row always carries the full
-agent name, since the badge may be truncated. The task shows the full available
-text, without a nested scrollbar. In the details, duration and cost are hidden only
-when unknown.
+Cache read, Cache write, Cost and Changes when each exists. The Provider row's
+mark and catalog display name come from the host's location provider store (the
+same list/sync adapter as agents and models); an unknown provider falls back to
+its id. The Agent row always carries the full agent name, since the badge may be
+truncated. The task shows the full available text, without a nested scrollbar. In
+the details, duration and cost are hidden only when unknown.
 
 Activity wording is generated from the tool part. A tool-provided description
 wins; otherwise: `Reading <file>`, `Writing <file>`, `Editing <file>`,

@@ -40,6 +40,7 @@ export interface FakeHostOptions {
   readonly agentsByLocation?: Readonly<Record<string, AgentInfo[]>>;
   readonly modelsByLocation?: Readonly<Record<string, ModelInfo[]>>;
   readonly providersByLocation?: Readonly<Record<string, ProviderInfo[]>>;
+  readonly providersOnSync?: Readonly<Record<string, readonly ProviderInfo[]>>;
   readonly diff?: (sessionID: string) => Promise<FileDiffInfo[]>;
   readonly prices?: () => Promise<PriceTable>;
   readonly sessionGate?: Promise<void>;
@@ -109,13 +110,17 @@ export function createFakeHost(options: FakeHostOptions = {}) {
   );
   const [agents, setAgentsSignal] = createSignal<AgentInfo[]>(options.agents ?? []);
   const [models, setModelsSignal] = createSignal<ModelInfo[]>(options.models ?? []);
+  const [providers, setProviders] = createSignal<Record<string, ProviderInfo[]>>(
+    Object.fromEntries(
+      Object.entries(options.providersByLocation ?? {}).map(([key, list]) => [key, [...list]]),
+    ),
+  );
 
   const failSessionSyncs = new Set(options.failSessionSyncOnce ?? []);
   const failMessageSyncs = new Set(options.failMessageSyncOnce ?? []);
   const messageHolds = new Map<string, { promise: Promise<void>; release: () => void }>();
   const agentsByLocation = options.agentsByLocation ?? {};
   const modelsByLocation = options.modelsByLocation ?? {};
-  const providersByLocation = options.providersByLocation ?? {};
 
   const sessionSyncs: { id: string; children: boolean }[] = [];
   const messageSyncs: string[] = [];
@@ -244,9 +249,14 @@ export function createFakeHost(options: FakeHostOptions = {}) {
         },
       },
       provider: {
-        list: (ref) => providersByLocation[locationKey(ref)] ?? options.providers ?? [],
+        list: (ref) => providers()[locationKey(ref)] ?? options.providers ?? [],
         sync: (ref) => {
-          providerSyncs.push(locationKey(ref));
+          const key = locationKey(ref);
+          providerSyncs.push(key);
+          const onSync = options.providersOnSync?.[key];
+          if (onSync !== undefined) {
+            setProviders((current) => ({ ...current, [key]: [...onSync] }));
+          }
           return Promise.resolve();
         },
       },
