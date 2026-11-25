@@ -521,6 +521,44 @@ describe("createFleetSource history", () => {
     });
   });
 
+  it("frees the backfill slot when the active member leaves the family", async () => {
+    const window = historyMessages(20, 80);
+    const older = historyMessages(20, 60);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        { info: makeSession({ id: "ses-root" }), messages: window },
+        {
+          info: makeSession({ id: "ses-child", parentID: "ses-root", created: 2 }),
+          messages: window,
+        },
+        {
+          info: makeSession({ id: "ses-next", parentID: "ses-root", created: 3 }),
+          messages: window,
+        },
+      ],
+      messagesOnSync: { "ses-root": window, "ses-child": window, "ses-next": window },
+      olderMessages: { "ses-child": older, "ses-next": older },
+    });
+    const releaseChild = fake.holdNextLoadMore("ses-child");
+
+    await withSource(fake.host, async () => {
+      await flush();
+      expect(fake.calls.messageLoadMores).toStrictEqual([{ id: "ses-child", all: true }]);
+
+      fake.deleteSession("ses-child");
+      await flush();
+      expect(fake.calls.messageLoadMores.map((call) => call.id)).toStrictEqual([
+        "ses-child",
+        "ses-next",
+      ]);
+
+      releaseChild();
+      await flush();
+      expect(fake.calls.messageLoadMores.filter((call) => call.id === "ses-child")).toHaveLength(1);
+    });
+  });
+
   it("hydrates descendants that only feed cost and its tariffs", async () => {
     const fake = createFakeHost({
       routed: "ses-root",

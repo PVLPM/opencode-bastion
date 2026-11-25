@@ -472,9 +472,17 @@ export function createFleetSource(host: FleetHost): FleetSource {
     const scope = scopeKey(current);
     // Every settled page asks for the next member; one load runs at a time.
     historyRevision();
-    if (backfill !== undefined) return;
+    const members = [current.root, ...current.children, ...current.descendants];
+    const active = backfill;
+    if (active !== undefined) {
+      // A deleted member must free the single-flight slot for the rest.
+      if (members.some((info) => info.id === active.sessionID)) return;
+      abortBackfill();
+      bumpHistory();
+      return;
+    }
     const data = current.data;
-    for (const info of [current.root, ...current.children, ...current.descendants]) {
+    for (const info of members) {
       if (!messageSynced.has(messageSyncKey(scope, info.id))) continue;
       if (historyFailures.has(info.id)) continue;
       if (data.session.message.loading(info.id)) continue;
