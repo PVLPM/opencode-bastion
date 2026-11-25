@@ -185,6 +185,39 @@ describe("AgentLanes", () => {
     expect(tip?.querySelector("dl > :last-child dd")?.textContent).toBe("17s");
   });
 
+  it("falls back to the lane title for a bare root block and calls it a task", () => {
+    const base = lane("ses_root", "Orchestrator", [[0, 10]], true);
+    const view = lanesView([
+      {
+        ...base,
+        title: "Agent card task, tokens and changes",
+        blocks: base.blocks.map((block) => ({ ...block, label: undefined, text: undefined })),
+      },
+    ]);
+    const { host } = mountLanes(view, 20);
+    expect(host.querySelector(".bn-block__label")?.textContent).toBe(
+      "Agent card task, tokens and changes",
+    );
+    host.querySelector<HTMLElement>('[data-bn-block="ses_root:0"]')?.focus();
+    const tip = host.querySelector(".bn-lanes__tip");
+    expect([...(tip?.querySelectorAll("dt") ?? [])].map((term) => term.textContent)).toEqual([
+      "Task",
+      "Status",
+      "Started",
+      "Duration",
+    ]);
+    expect(tip?.querySelector("dd")?.textContent).toBe("Agent card task, tokens and changes");
+    expect(tip?.textContent).not.toContain("Not recorded");
+  });
+
+  it("keeps the prompt row for a root block with prompt text", () => {
+    const { host } = mountLanes(lanesView([lane("ses_root", "Orchestrator", [[0, 10]], true)]), 20);
+    host.querySelector<HTMLElement>('[data-bn-block="ses_root:0"]')?.focus();
+    const tip = host.querySelector(".bn-lanes__tip");
+    expect(tip?.querySelector("dt")?.textContent).toBe("Prompt");
+    expect(tip?.querySelector("dd")?.textContent).toBe("Orchestrator 0\nFull execution text");
+  });
+
   it("uses a distinct native radio group for each mounted panel", () => {
     const first = mountLanes(familyLanes()).host;
     const second = mountLanes(familyLanes()).host;

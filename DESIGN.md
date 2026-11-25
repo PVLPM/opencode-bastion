@@ -216,7 +216,7 @@ start, and the order is stable.
   connectors and no inference from overlapping time.
 - Only a real user prompt labels an orchestrator block. Internal synthetic
   messages from plugins and host continuations never become a block label, block
-  text or lane-tip prompt; a block without one falls back to the lane title.
+  text or lane-tip value; a block without one falls back to the lane title.
 
 ### Geometry
 
@@ -355,7 +355,7 @@ Hovering or focusing a block opens a popover table:
 | Field | Content |
 | --- | --- |
 | Provenance | One row per handoff kind that landed on the block: `Delegated by` for a delegation, `Follow-up from` for a follow-up; the value is the orchestrator agent's name |
-| Task (Prompt on a root block) | Full task or prompt, `Not recorded` when unknown |
+| Task (`Prompt` only on a root block with a recorded prompt) | The full task or prompt; falls back through the block's label to the lane title, `Not recorded` only when none exists |
 | Status | The status label |
 | Started | Local clock time, with an ISO `datetime` |
 | Duration | Block end minus start, shared duration format |

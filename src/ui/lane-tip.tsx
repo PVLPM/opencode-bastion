@@ -17,7 +17,8 @@ export function LaneTip(props: {
   id: string;
   anchor: HTMLElement;
   block: BlockBox;
-  prompt: boolean;
+  root: boolean;
+  title: string | undefined;
   sourceAgent: string | undefined;
   inbound: ReadonlySet<Handoff["kind"]> | undefined;
   onEnter: () => void;
@@ -118,7 +119,9 @@ export function LaneTip(props: {
     >
       <dl>
         <div>
-          <dt id={`${props.id}-text`}>{props.prompt ? "Prompt" : "Task"}</dt>
+          <dt id={`${props.id}-text`}>
+            {props.root && props.block.text !== undefined ? "Prompt" : "Task"}
+          </dt>
           <dd
             class="bn-lanes__tip-text"
             aria-labelledby={`${props.id}-text`}
@@ -127,7 +130,7 @@ export function LaneTip(props: {
               content = element;
             }}
           >
-            {props.block.text ?? "Not recorded"}
+            {props.block.text ?? props.block.label ?? props.title ?? "Not recorded"}
           </dd>
         </div>
         <Show when={props.sourceAgent && props.inbound?.has("delegate")}>

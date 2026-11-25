@@ -203,7 +203,8 @@ function Block(props: {
                   id={tipID}
                   anchor={trigger()}
                   block={block()}
-                  prompt={props.lane()?.root === true}
+                  root={props.lane()?.root === true}
+                  title={props.lane()?.title}
                   sourceAgent={props.geometry()?.sourceAgent}
                   inbound={props.geometry()?.inbound.get(id())}
                   onEnter={() => props.inspection.hover(id())}
