@@ -114,10 +114,11 @@ and file contents are never shown. Waiting appends `…` to its reason; task and
 prompt text appear only in the task row, the details, the lane labels and the
 lane tooltip.
 
-### Rolling money
+### Rolling metrics
 
-Cost uses an odometer. The exact formatted value (`$1.24`, `~$1.24`, `<$0.01`)
-is the accessible text; the visible digit cells are `aria-hidden`. Only the
+Cost and the cumulative token metric use an odometer. The exact formatted value
+(`$1.24`, `~$1.24`, `<$0.01`, `12.8k tok`) is the accessible text; the visible
+digit cells are `aria-hidden`. Only the
 digits that changed roll, each clipped to its one-character cell, over 440ms.
 Nothing rolls on mount, when the formatted value is unchanged, on a theme or
 width change, or on an unrelated fleet revision. Host `data-motion="reduce"` and
@@ -374,7 +375,7 @@ Motion answers "what changed":
 | Activity text changes | Old line leaves up and the new rises from below: 220ms in, 180ms out, clipped to keep the row height |
 | Card joins, or moves (including into Finished) | FLIP from its old position: 240ms move ease; arrivals 280ms ease-out, 40ms stagger capped at 160ms. A card moved to Finished is not remounted, so its open details and keyboard focus stay |
 | Status changes | A real change settles the mark from scale 0.6 over 260ms; a fleet revision with the same status animates nothing |
-| Cost changes | Only changed digits roll, clipped to their cell, over 440ms; no roll on mount or an unchanged formatted value |
+| Cost or token metric changes | Only changed digits roll, clipped to their cell, over 440ms; no roll on mount or an unchanged formatted value |
 | Details open/close | Height and fade, 240ms out / 260ms in, interruptible both ways |
 | Block appears | Clip-path wipe, 320ms |
 | Connector appears | Draws along its path once, 220ms |
@@ -400,7 +401,7 @@ element) or the OS preference. When it is on:
 - the ticker does not slide and does not keep a leaving line;
 - no beams are rendered;
 - the Soft Radar shows its still frame;
-- FLIP, status-change and cost-roll animations are skipped;
+- FLIP, status-change and rolling-metric animations are skipped;
 - the scale indicator jumps to the selected item;
 - all animations and transitions in the panel collapse to 0.001ms.
 
@@ -416,8 +417,8 @@ Layout is unchanged. Reduced motion is not a different layout.
   inline padding. The scale radio group is one Tab stop with arrow/Home/End
   movement and a 2px inset focus ring. The header "needs you" chip keeps its 22px
   height, and the resize handle is a 9px-tall drag strip with a 24×3 grip.
-- Cost exposes the exact formatted value to assistive technology; the rolling
-  digit layer is `aria-hidden` and is not a live region.
+- Cost and token metrics expose the exact formatted value to assistive
+  technology; the rolling digit layer is `aria-hidden` and is not a live region.
 - A card is an `article` with a full-card button labelled
   `Open <agent>, <title>, <status>` (the title is omitted when absent); the routed
   card sets `aria-current`. The button is disabled when the session is missing, so

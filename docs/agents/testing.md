@@ -151,10 +151,11 @@ These behaviors have already been wrong once and must not regress:
   left edge at its center (the call's x for an inserted follow-up). Every point
   stays within `0..nowX` and `0..height` in both Fit and Detail; there are no
   elbows and no caret path.
-- **Rolling money**: no reel on mount, an unchanged formatted value,
+- **Rolling metrics**: no reel on mount, an unchanged formatted value,
   `data-motion="reduce"`, or a theme/width change; one reel per changed digit,
   removed on `animationend`; the exact formatted text is accessible and the
-  visual layer is `aria-hidden`.
+  visual layer is `aria-hidden`; token reels appear in the card metric and the
+  header total.
 - **Line refresh**: a new completed assistant turn with changed files refetches;
   an unchanged completed time does not; absent snapshot metadata still queries the
   authoritative diff; an explicit `files: []` skips the refresh but keeps the last

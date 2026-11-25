@@ -89,9 +89,9 @@ These have produced real defects or are easy to get wrong:
 11. Handoffs: the call's x on the orchestrator lane to the child's left edge (or
     the call's x for an inserted follow-up), one cubic with no elbows, and no
     point past `now` in either scale.
-12. Rolling money: no roll on mount, unchanged value, theme/width change or
-    reduced motion; only changed digits roll; the accessible text is the final
-    formatted value.
+12. Rolling cost and token metrics: no roll on mount, unchanged value,
+    theme/width change or reduced motion; only changed digits roll; the
+    accessible text is the final formatted value.
 13. Line refresh: absent snapshot metadata still queries the diff; explicit
     `files: []` keeps the last known cumulative count; a new completed turn with
     changed files refetches, and an unchanged completed time does not.
@@ -114,8 +114,8 @@ These have produced real defects or are easy to get wrong:
 - [ ] Scale control: native compact segmented style, one sliding indicator, 24px
       items with 8px inline padding, one Tab stop with arrow/Home/End movement,
       and no first-mount motion.
-- [ ] Cost digits roll only when the formatted value changes; reduced motion shows
-      the final text immediately; the accessible text is exact.
+- [ ] Cost and token digits roll only when the formatted value changes; reduced
+      motion shows the final text immediately; the accessible text is exact.
 - [ ] Narrow widths: the header running count drops at ≤330px header width, the
       card cost at ≤330px, line counts at ≤300px and the ring at ≤280px; duration
       stays, and dropped values remain in the details.

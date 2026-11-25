@@ -144,8 +144,8 @@ Motion and accessibility:
 - [ ] Nothing animates on mount; entrance motion exists only for things created
       after the panel opened. A real status change animates the mark once; an
       unchanged fleet revision does not.
-- [ ] Cost digits roll only on a changed formatted value, and reduced motion shows
-      the final text immediately.
+- [ ] Cost and token digits roll only on a changed formatted value, and reduced
+      motion shows the final text immediately.
 - [ ] The scale indicator slides about 150ms without bounce, does not animate on
       first mount, and jumps under reduced motion.
 - [ ] Reduced motion stops the ticker slide, beams, radar animation, FLIP, status,
