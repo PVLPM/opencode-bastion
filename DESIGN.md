@@ -452,6 +452,11 @@ model name ellipsizes. The agent badge is capped at 62% (48% below 300px) and th
 title ellipsizes; the task is capped at 50%. The panel's vertical rhythm never
 depends on text length: every row is a fixed height.
 
+The header is its own container (`container: bn-head / inline-size`). At ≤330px
+its running count leaves first, because the cards already carry the status mark
+and the pill repeats the count; the agent count, the family token total and the
+family cost stay on one fixed-height line.
+
 The lanes region does not squeeze: in Detail it scrolls horizontally with sticky
 labels and axis, which is why the panel is usable at 320px.
 

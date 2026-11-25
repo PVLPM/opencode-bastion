@@ -88,6 +88,9 @@ Cards:
 
 Fleet:
 
+- [ ] The header shows the family token total beside the family cost; at ≤330px of
+      header width the running count leaves first, so the agent count and the
+      token/cost pair stay readable.
 - [ ] Wires meet the root card's node and each child card's elbow; indentation and
       wrapping do not desynchronize them.
 - [ ] Active wires are accent, finished wires are quiet; the spine turns quiet

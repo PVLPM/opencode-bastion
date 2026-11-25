@@ -111,7 +111,7 @@ export function FleetPanel(props: FleetPanelProps) {
                   {agents().length} {agents().length === 1 ? "agent" : "agents"}
                 </span>
                 <Show when={running() > 0}>
-                  <span>{running()} running</span>
+                  <span class="bn-head__running">{running()} running</span>
                 </Show>
               </span>
               <Show when={waiting() > 0}>
