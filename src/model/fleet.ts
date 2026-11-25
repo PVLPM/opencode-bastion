@@ -40,6 +40,8 @@ export interface FleetInput {
   ): number | undefined;
   /** Exact reported cost for the whole family, as the store already sums it. */
   familyCost: number;
+  /** False once the host connection drops; live statuses become unknown. */
+  connected: boolean;
 }
 
 /** A decided cost and the estimated share the store's cumulative cost omits. */
@@ -152,7 +154,12 @@ function agentView(
     info: snapshot.info,
     messages: snapshot.messages,
   });
-  const interval = sessionInterval(snapshot.info, snapshot.running);
+  // A disconnected host cannot confirm a live status; keep the historical
+  // tokens, cost and task, but do not present stale activity as current.
+  const disconnected =
+    !input.connected && (derived.status === "running" || derived.status === "waiting");
+  const status = disconnected ? "unknown" : derived.status;
+  const interval = sessionInterval(snapshot.info, snapshot.running && !disconnected);
   const assistantModel = latestAssistantModel(snapshot.messages);
   const model = assistantModel ?? snapshot.info.model;
   return {
@@ -161,9 +168,11 @@ function agentView(
     title: sessionTitle(snapshot.info.title),
     model: input.modelLabel(snapshot.info.location, model),
     effort: assistantModel?.variant,
-    status: derived.status,
-    statusDetail: derived.detail,
-    activity: deriveActivity(snapshot.messages, derived.status, derived.detail),
+    status,
+    statusDetail: disconnected ? undefined : derived.detail,
+    activity: disconnected
+      ? undefined
+      : deriveActivity(snapshot.messages, derived.status, derived.detail),
     task,
     taskText,
     startedAt: interval.startedAt,
@@ -174,7 +183,7 @@ function agentView(
       input.contextLimit(snapshot.info.location, ref),
     ),
     lines: snapshot.lines,
-    errorKind: derived.errorKind,
+    errorKind: disconnected ? undefined : derived.errorKind,
     current: snapshot.info.id === input.currentID,
   };
 }

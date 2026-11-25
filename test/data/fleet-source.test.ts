@@ -941,6 +941,36 @@ describe("createFleetSource clock", () => {
   });
 });
 
+describe("createFleetSource connection", () => {
+  it("marks live members unknown while disconnected and restores them on reconnect", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root", cost: 0.5, tokens: makeTokens({ input: 10 }) }),
+          status: "running",
+        },
+      ],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(source.fleet()?.root.status).toBe("running");
+
+      fake.setConnected(false);
+      await flush();
+      expect(source.fleet()?.root.status).toBe("unknown");
+      expect(source.fleet()?.root.statusDetail).toBeUndefined();
+      expect(source.fleet()?.root.cost).toStrictEqual({ usd: 0.5, estimated: false });
+      expect(source.fleet()?.root.tokens?.total).toBe(10);
+
+      fake.setConnected(true);
+      await flush();
+      expect(source.fleet()?.root.status).toBe("running");
+    });
+  });
+});
+
 describe("createFleetSource prices", () => {
   it("fetches prices once, lazily, for an unpriced session", async () => {
     let release: ((table: PriceTable) => void) | undefined;

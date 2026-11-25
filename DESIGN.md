@@ -169,6 +169,10 @@ Status evidence is fixed:
 | Done | idle outcome `succeeded` |
 | Unknown | idle without outcome, `interrupted`, or missing data |
 
+A disconnected host cannot confirm a live state: Running and Needs you fall back
+to Unknown until the connection returns. Recorded cost, tokens, task and timeline
+stay visible.
+
 The composer pill appears only after the orchestrator delegates. It shows the
 agent count and the most actionable state: waiting (`warning`), then failed
 (`danger`), then running; once everything is done it is `success` with a check,

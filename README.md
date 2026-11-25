@@ -67,7 +67,8 @@ Add the absolute path of this folder to `plugins` in your OpenCode config
   changes it. They are not an exact per-agent attribution when agents touch the
   same files; the card says so in a tooltip.
 - **Status** is shown only on evidence; anything else is Unknown (for example an
-  interrupted session).
+  interrupted session). A live Running or Needs you member also becomes Unknown
+  while the host is disconnected; its recorded cost, tokens and history remain.
 - The fleet covers one session family: the routed session's root and its direct
   subagents.
 

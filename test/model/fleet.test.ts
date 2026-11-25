@@ -46,6 +46,7 @@ function fleetInput(overrides: Partial<FleetInput> = {}): FleetInput {
     contextLimit: () => undefined,
     price: () => undefined,
     familyCost: 0,
+    connected: true,
     ...overrides,
   };
 }
@@ -468,6 +469,47 @@ describe("buildFleet", () => {
 
     expect(root.status).toBe(status);
     expect(root.statusDetail).toBe(detail);
+  });
+
+  const disconnectCases: readonly { readonly name: string; readonly values: SnapshotValues }[] = [
+    { name: "running", values: { running: true } },
+    { name: "waiting", values: { running: true, permissions: 1 } },
+  ];
+
+  it.each(disconnectCases)("shows a disconnected $name session as unknown and keeps its history", ({
+    values,
+  }) => {
+    const tokens = makeTokens({ input: 10 });
+    const root = buildFleet(
+      fleetInput({
+        connected: false,
+        root: snapshot({
+          ...values,
+          cost: 0.7,
+          tokens,
+          messages: [makeAssistant({ tokens, cost: 0.7, completed: 1 })],
+        }),
+        familyCost: 0.7,
+      }),
+    ).root;
+
+    expect(root.status).toBe("unknown");
+    expect(root.statusDetail).toBeUndefined();
+    expect(root.activity).toBeUndefined();
+    expect(root.cost).toStrictEqual({ usd: 0.7, estimated: false });
+    expect(root.tokens?.total).toBe(10);
+  });
+
+  it("keeps a finished session's historical status while disconnected", () => {
+    const root = buildFleet(
+      fleetInput({
+        connected: false,
+        root: snapshot({ outcome: "succeeded", idle: 2_000 }),
+      }),
+    ).root;
+
+    expect(root.status).toBe("done");
+    expect(root.endedAt).toBe(2_000);
   });
 
   it("keeps the pill reporting running while the root is done and a child runs", () => {

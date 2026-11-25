@@ -411,6 +411,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
       price: (info, ref, tokens, aggregated) =>
         priceUsage(data, prices(), info, ref, tokens, aggregated),
       familyCost: data.session.cost(current.rootID),
+      connected: current.connected,
     });
   });
 
