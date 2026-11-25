@@ -40,7 +40,8 @@ export function formatMoney(money: Money): string {
 }
 
 export function formatTokens(count: number): string {
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  // Rounding at one decimal makes 999_950 render as 1000.0k; promote it to M.
+  if (count >= 999_950) return `${(count / 1_000_000).toFixed(1)}M`;
   if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k`;
   return String(count);
 }

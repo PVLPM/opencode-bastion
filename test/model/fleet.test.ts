@@ -177,6 +177,9 @@ describe("buildFleet", () => {
   };
 
   const mentionedPrompt = "@Fixer @skill-name @src/a.ts Fix the login flow";
+  const imagePath = "@C:\\shots\\image.png";
+  const imagePrompt = `${imagePath}\n\nImplement the change`;
+  const skillPrompt = "@skill-name\n\nImplement the change";
 
   const taskCases: readonly TaskCase[] = [
     {
@@ -206,6 +209,41 @@ describe("buildFleet", () => {
       ],
       expected: "Fix the bug",
       expectedText: "Fix the bug",
+    },
+    {
+      name: "removes a leading image path mention on its own line",
+      messages: [
+        makeUser(20, "Fallback text", {
+          displayText: imagePrompt,
+          files: [
+            {
+              data: "",
+              mime: "image/png",
+              source: { type: "inline" },
+              mention: mention(imagePrompt, imagePath),
+            },
+          ],
+        }),
+      ],
+      expected: "Implement the change",
+      expectedText: "Implement the change",
+    },
+    {
+      name: "removes a leading skill mention on its own line",
+      messages: [
+        makeUser(20, "Fallback text", {
+          displayText: skillPrompt,
+          skills: [
+            {
+              id: "skill-name",
+              name: "skill-name",
+              mention: mention(skillPrompt, "@skill-name"),
+            },
+          ],
+        }),
+      ],
+      expected: "Implement the change",
+      expectedText: "Implement the change",
     },
     {
       name: "removes matching file, agent and skill mention spans",
