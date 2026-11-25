@@ -681,6 +681,39 @@ describe("buildFleet", () => {
     expect(fleet.totalCost).toBeUndefined();
   });
 
+  it("rejects a zero-native-cost member whose recorded share is missing from the base", () => {
+    const input = fleetInput({
+      children: [
+        snapshot({
+          id: "ses-child",
+          created: 1,
+          running: true,
+          tokens: makeTokens({ input: 2_000 }),
+          messages: [
+            makeAssistant({
+              id: "m1",
+              tokens: makeTokens({ input: 1_000 }),
+              cost: 0.2,
+              completed: 1,
+            }),
+            makeAssistant({
+              id: "m2",
+              tokens: makeTokens({ input: 1_000 }),
+              cost: 0,
+              completed: 2,
+            }),
+          ],
+        }),
+      ],
+      familyCost: 0,
+      price: perThousand,
+    });
+    const fleet = buildFleet(input);
+
+    expect(fleet.active[0]?.cost).toStrictEqual({ usd: 1.2, estimated: true });
+    expect(fleet.totalCost).toBeUndefined();
+  });
+
   it("leaves the family total unknown when an unpriced member cannot be priced", () => {
     const input = fleetInput({
       root: snapshot({ id: "ses-root", cost: 0.7 }),

@@ -55,8 +55,9 @@ Add the absolute path of this folder to `plugins` in your OpenCode config
   be incomplete: OpenCode's ledger also includes title, generate and reverted
   usage that has no message, so token totals are never used as proof of
   completeness. If a zero-cost request cannot be priced, cost is Unknown rather
-  than understated. A session with no reported cost shows $0 only when its ledger
-  tokens are also zero; positive ledger usage with no loaded message is Unknown.
+  than understated. A session with no reported cost, no loaded usage evidence and
+  zero ledger tokens is a measured $0; loaded usage can still produce an
+  estimate, and positive ledger usage with no loaded message is Unknown.
   The header total starts from the family total OpenCode reports and adds only
   the estimated share of each member, so nothing is counted twice. It covers the
   family OpenCode knows about for the routed root; a nested agent the host has

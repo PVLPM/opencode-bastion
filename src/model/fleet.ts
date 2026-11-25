@@ -67,9 +67,9 @@ const COST_EPSILON = 1e-9;
  * the estimated share is added; that share is the whole estimate for a member
  * with no reported cost. Any member that cannot be priced leaves the family
  * total unknown instead of silently undercounting it. A zero-native-cost member
- * whose records report more than its estimate is contradictory, so it leaves
- * the total unknown too. The member set is the host's known family for this
- * root, not a recursive crawl of every nested session.
+ * whose records report a recorded cost the native base omits is contradictory,
+ * so it leaves the total unknown too. The member set is the host's known family
+ * for this root, not a recursive crawl of every nested session.
  */
 function familyTotal(
   input: FleetInput,
@@ -86,7 +86,8 @@ function familyTotal(
     if (priced === undefined || priced.money === undefined || priced.extra === undefined) {
       return undefined;
     }
-    if (info.cost === 0 && priced.money.usd > priced.extra + COST_EPSILON) return undefined;
+    // A zero native base must not omit a recorded share its own messages carry.
+    if (info.cost === 0 && priced.money.usd - priced.extra > COST_EPSILON) return undefined;
     usd += priced.extra;
     if (priced.money.estimated) estimated = true;
   }

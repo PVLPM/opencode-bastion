@@ -52,11 +52,12 @@ one and why.
       Loaded-message estimates are caveated: title, generate and reverted usage
       has no message, token totals are never treated as a completeness
       certificate, and an unversioned alias uses its current listed tariff. A
-      session with no reported cost shows $0 only when its ledger tokens are
-      zero; positive ledger usage without loaded message evidence is absent. The
+      session with no reported cost, no loaded usage evidence and zero ledger
+      tokens is a measured $0; loaded usage can still produce an estimate, and
+      positive ledger usage without loaded message evidence is absent. The
       family total covers the host's known family for the routed root, not a
       recursively crawled tree, and a zero-native-cost member whose records
-      report more than its estimate makes the total absent.
+      report a recorded cost the native base omits makes the total absent.
 - [ ] Context: latest token-bearing assistant over the limit of the model that
       produced it; no ring for zero/unknown limits or after a completed
       compaction.

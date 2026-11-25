@@ -500,17 +500,18 @@ labels and axis, which is why the panel is usable at 320px.
   tooltip says the value covers loaded messages and may be incomplete: title,
   generate and reverted usage has no message, so token totals are not a
   completeness proof. If a zero-cost request cannot be priced, cost is absent
-  rather than understated. A session with no reported cost shows $0 only when its
-  ledger tokens are also zero; positive ledger usage with no loaded message is
+  rather than understated. A session with no reported cost, no loaded usage
+  evidence and zero ledger tokens is a measured $0; loaded usage can still
+  produce an estimate, and positive ledger usage with no loaded message is
   absent. The header total is the reported family total plus only the estimated
   share of each member, so nothing is counted twice; a member with no reported
   cost contributes its estimate once. It covers the family OpenCode knows about
   for the routed root: readiness proves those members are loaded, not that every
   nested agent was discovered, so a cold grandchild missing from the host index
   is not included until the host registers it. If any member cannot be priced,
-  or a zero-native-cost member's records report more than its estimate, the
-  total is absent. `claude-agent` is Anthropic CLI routing for subscription use.
-  Its unversioned aliases are resolved from the host's model metadata and
+  or a zero-native-cost member's records report a recorded cost the native base
+  omits, the total is absent. `claude-agent` is Anthropic CLI routing for
+  subscription use. Its unversioned aliases are resolved from the host's model metadata and
   display name, never a hardcoded version, and priced with Anthropic list
   prices, so the estimate is an API-list-price equivalent, not subscription
   spend. It stays estimated (`~`) like any other estimate. An alias estimate
