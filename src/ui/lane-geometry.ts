@@ -8,10 +8,10 @@ export const LANE_HEIGHT = 28;
 const START_PAD = 8;
 const END_PAD = 24;
 const MIN_BLOCK = 3;
-/** Gap a label keeps before the next block on its lane; below the minimum it is hidden. */
+/** Gap a label keeps before the next block on its lane. */
 const LABEL_GAP = 6;
-const MIN_LABEL = 18;
-export const IN_BLOCK_LABEL_MIN = 36;
+/** Three characters at the 11px label font, plus 6px and 2px inline padding. */
+const MIN_LABEL = 26;
 const MIN_TICK_SPACING = 64;
 const MIN_FIT_TICK_SPACING = 44;
 const NOW_LABEL_ROOM = 64;
@@ -45,7 +45,7 @@ export interface BlockBox {
   readonly status: AgentStatus;
   readonly label: string | undefined;
   readonly text: string | undefined;
-  /** Room for the label from the block's left edge to the next block (0: no label). */
+  /** Room for the label inside the block, up to the next block (0: too narrow to label). */
   readonly labelWidth: number;
   readonly live: boolean;
 }
@@ -237,10 +237,7 @@ export function laneGeometry(
       const blockWidth = Math.max(0, Math.min(limit - left, Math.max(MIN_BLOCK, x(end) - left)));
       const gapRoom =
         Math.min(limit, next === undefined ? width : x(next.start)) - LABEL_GAP - left;
-      const repeatsTitle = !lane.root && (block.label ?? lane.title) === lane.title;
-      const short = blockWidth < IN_BLOCK_LABEL_MIN;
-      const room = repeatsTitle ? Math.min(gapRoom, short ? 0 : blockWidth) : gapRoom;
-      const textRoom = room - (short ? blockWidth : 0);
+      const labelRoom = Math.min(blockWidth, gapRoom);
       return {
         id: block.id,
         x: left,
@@ -250,7 +247,7 @@ export function laneGeometry(
         status: block.status,
         label: block.label,
         text: block.text,
-        labelWidth: textRoom >= MIN_LABEL ? room : 0,
+        labelWidth: labelRoom >= MIN_LABEL ? labelRoom : 0,
         live: block.end === undefined,
       };
     }),
@@ -281,7 +278,6 @@ export function laneGeometry(
     const source = rootBlocks[rootCursor];
     const { block, y } = target;
     const atX = Math.max(0, Math.min(limit, x(handoff.at)));
-    const origin = source !== undefined && source.width > 0 ? source.x + source.width : atX;
     const inserted = handoff.at > block.start && (block.live || handoff.at < block.end);
     const landing = inserted ? Math.min(block.x + block.width, atX) : block.x;
     const kinds = inbound.get(block.id) ?? new Set<Handoff["kind"]>();
@@ -293,7 +289,9 @@ export function laneGeometry(
       to: block.id,
       kind: handoff.kind,
       live: block.live,
-      d: handoffPath({ x: origin, y: startY }, { x: landing, y }, limit),
+      // Start at the call itself: a child block that starts after the call would
+      // make a line from the source block's right edge bend backwards.
+      d: handoffPath({ x: atX, y: startY }, { x: landing, y }, limit),
     });
   }
 

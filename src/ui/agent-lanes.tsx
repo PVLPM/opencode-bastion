@@ -21,7 +21,6 @@ import {
   type LaneBox,
   type LaneScale,
   type LanesGeometry,
-  IN_BLOCK_LABEL_MIN,
   laneGeometry,
   laneSpan,
   LANE_HEIGHT,
@@ -127,9 +126,9 @@ function ScaleControl(props: {
 }
 
 /**
- * One execution: the block is exactly as long as it ran. Its label is a
- * separate layer that may continue past a short block into the empty lane, in
- * a quieter tone, and stops before the next block.
+ * One execution: the block is exactly as long as it ran. Its label is clipped
+ * inside the block, up to the next block; a block too narrow for three
+ * characters shows none and keeps the full text in the tooltip.
  */
 function Block(props: {
   lane: () => LaneBox | undefined;
@@ -149,7 +148,6 @@ function Block(props: {
         const text = () => block().label ?? props.lane()?.title;
         const id = () => block().id;
         const inspected = () => props.inspection.active() === id();
-        const short = () => block().width < IN_BLOCK_LABEL_MIN;
         return (
           <div
             onFocusIn={() => props.inspection.focus(id())}
@@ -190,13 +188,10 @@ function Block(props: {
                 class="bn-block__label"
                 aria-hidden="true"
                 data-status={block().status}
-                data-short={short() ? "true" : undefined}
                 data-enter={enter ? "true" : undefined}
                 style={{
                   left: `${block().x}px`,
                   "max-width": `${block().labelWidth}px`,
-                  "--bn-inside": `${block().width}px`,
-                  "--bn-label-offset": `${short() ? block().width : 0}px`,
                 }}
               >
                 <span>{text()}</span>
@@ -277,7 +272,7 @@ interface Inspection {
 /**
  * Agent Lanes: one lane per session on a shared time axis, execution blocks at
  * their real start and end, live blocks reaching for now, and dashed handoff
- * connectors from the orchestrator's call to the child block it fed.
+ * connectors from the orchestrator's call x to the child block it fed.
  *
  * The region is collapsible, resizable from its top edge and scrolls on its
  * own in both directions. It follows the newest work only while the user is

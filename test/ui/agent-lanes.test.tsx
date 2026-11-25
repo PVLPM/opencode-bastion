@@ -208,23 +208,35 @@ describe("AgentLanes", () => {
     expect(live?.style.width).not.toBe(width);
   });
 
-  it("places a short block's label beyond its edge when there is free space", () => {
-    const view = lanesView([
-      lane(
-        "ses_root",
-        "Orchestrator",
-        [
-          [0, 1],
-          [45, undefined],
-        ],
-        true,
-      ),
-    ]);
+  it("clips a short block's label inside the block", () => {
+    const view = lanesView([lane("ses_root", "Orchestrator", [[0, 1]], true)]);
     const { host } = mountLanes(view);
-    const short = host.querySelector<HTMLElement>(".bn-block__label[data-short]");
-    expect(short?.textContent).toBe("Orchestrator 0");
-    const width = short?.previousElementSibling?.getAttribute("style");
-    expect(width).toContain(`width: ${short?.style.getPropertyValue("--bn-label-offset")}`);
+    const label = host.querySelector<HTMLElement>(".bn-block__label");
+    expect(label?.textContent).toBe("Orchestrator 0");
+    expect(label?.style.left).toBe("8px");
+    expect(label?.style.maxWidth).toBe("40px");
+    expect(label?.hasAttribute("data-short")).toBe(false);
+  });
+
+  it("renders no label on a block too narrow for three characters", () => {
+    const view = lanesView([lane("ses_root", "Orchestrator", [[0, 0.5]], true)]);
+    const { host } = mountLanes(view);
+    expect(host.querySelector("[data-bn-block]")).not.toBeNull();
+    expect(host.querySelector(".bn-block__label")).toBeNull();
+  });
+
+  it("keeps every label inside its block", () => {
+    const { host } = mountLanes(familyLanes());
+    const labels = [...host.querySelectorAll<HTMLElement>(".bn-block__label")];
+    expect(labels.length).toBeGreaterThan(0);
+    for (const label of labels) {
+      const block = label.previousElementSibling;
+      if (!(block instanceof HTMLElement)) throw new Error("label without a block");
+      expect(label.style.left).toBe(block.style.left);
+      expect(Number.parseFloat(label.style.maxWidth)).toBeLessThanOrEqual(
+        Number.parseFloat(block.style.width),
+      );
+    }
   });
 
   it.each([

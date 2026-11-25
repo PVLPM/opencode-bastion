@@ -147,10 +147,10 @@ These behaviors have already been wrong once and must not regress:
   real status change runs one mark animation. The primitive status memo is the
   signal, not the fleet object.
 - **Handoffs**: a connector path contains only `M` and `C` commands, starts at the
-  source block's right edge at its center (call x when the source is missing or
-  zero-width), and ends at the child block's left edge at its center (call x for
-  an inserted follow-up). Every point stays within `0..nowX` and `0..height` in
-  both Fit and Detail; there are no elbows and no caret path.
+  call's x on the orchestrator lane at its center, and ends at the child block's
+  left edge at its center (the call's x for an inserted follow-up). Every point
+  stays within `0..nowX` and `0..height` in both Fit and Detail; there are no
+  elbows and no caret path.
 - **Rolling money**: no reel on mount, an unchanged formatted value,
   `data-motion="reduce"`, or a theme/width change; one reel per changed digit,
   removed on `animationend`; the exact formatted text is accessible and the

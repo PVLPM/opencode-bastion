@@ -129,8 +129,8 @@ describe("deriveLanes execution blocks", () => {
     readonly prompt: SessionMessageInfo;
     readonly waiting: boolean;
     readonly status: AgentStatus;
-    readonly label: string;
-    readonly text: string;
+    readonly label: string | undefined;
+    readonly text: string | undefined;
   }
 
   const triggerCases: readonly TriggerCase[] = [
@@ -155,8 +155,8 @@ describe("deriveLanes execution blocks", () => {
       prompt: makeSynthetic({ id: "msg-synthetic", created: 30, text: "Continue" }),
       waiting: false,
       status: "running",
-      label: "Continue",
-      text: "Continue",
+      label: undefined,
+      text: undefined,
     },
   ];
 
@@ -380,22 +380,13 @@ const labelCases: readonly LabelCase[] = [
     text: "Implement the change",
   },
   {
-    name: "a synthetic prompt prefers its description",
+    name: "an internal synthetic message does not label the block",
     messages: [
       makeSynthetic({ created: 10, text: "Full text", description: "Synthetic task" }),
       makeAssistant({ id: "a1", created: 20 }),
     ],
-    label: "Synthetic task",
-    text: "Synthetic task",
-  },
-  {
-    name: "a synthetic prompt without a description uses its first line",
-    messages: [
-      makeSynthetic({ created: 10, text: "\n  Synthetic text  \nmore" }),
-      makeAssistant({ id: "a1", created: 20 }),
-    ],
-    label: "Synthetic text",
-    text: "Synthetic text  \nmore",
+    label: undefined,
+    text: undefined,
   },
   {
     name: "an assistant without a preceding prompt has no label",
@@ -412,6 +403,28 @@ describe("deriveLanes root block labels", () => {
 
     expect(block?.label).toBe(label);
     expect(block?.text).toBe(text);
+  });
+
+  it("keeps the real user prompt when an internal synthetic message follows it", () => {
+    const root = laneSession({
+      messages: [
+        makeUser(10, "\n  Real task  \nmore"),
+        makeSynthetic({
+          id: "msg-internal",
+          created: 15,
+          description: "Synthetic task",
+          text: "Full text",
+        }),
+        makeAssistant({ id: "a1", created: 20 }),
+      ],
+    });
+
+    const block = deriveLanes(lanesInput({ root })).lanes[0]?.blocks[0];
+
+    expect(block).toMatchObject({
+      label: "Real task",
+      text: "Real task  \nmore",
+    });
   });
 });
 

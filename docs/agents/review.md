@@ -58,7 +58,8 @@ one and why.
 - [ ] Effort comes only from the observed model variant.
 - [ ] Lanes: blocks come from assistant/idle boundaries, not event silence; past
       waiting is not drawn; handoffs need a confirmed child session id; no
-      child→child edges.
+      child→child edges; only a real user prompt labels an orchestrator block,
+      never a synthetic internal message.
 - [ ] A known limitation is documented where a user will see it, not hidden in
       code comments.
 
@@ -85,8 +86,8 @@ These have produced real defects or are easy to get wrong:
 9. An unchanged fleet revision leaves the status mark still; only a real status
    change animates it once.
 10. A card moved to Finished keeps its open details and keyboard focus.
-11. Handoffs: source right edge (or call x when absent/zero-width) to child left
-    edge (or call x for an inserted follow-up), one cubic with no elbows, and no
+11. Handoffs: the call's x on the orchestrator lane to the child's left edge (or
+    the call's x for an inserted follow-up), one cubic with no elbows, and no
     point past `now` in either scale.
 12. Rolling money: no roll on mount, unchanged value, theme/width change or
     reduced motion; only changed digits roll; the accessible text is the final
@@ -106,9 +107,10 @@ These have produced real defects or are easy to get wrong:
       card ringed.
 - [ ] Fleet wires: active accent, finished quiet, aligned to measured cards;
       beams only on events and absent under reduced motion.
-- [ ] Lanes: truthful blocks, label overflow rules, handoff geometry (source
-      right edge or call x to child left edge, one cubic, no elbow or caret),
-      quiet connectors until hover/focus, Fit/Detail behavior, pinned scroll.
+- [ ] Lanes: truthful blocks, labels clipped inside their block and hidden below
+      three characters, handoff geometry (call x to child left edge, or call x for
+      an inserted follow-up, one cubic, no elbow or caret), quiet connectors until
+      hover/focus, Fit/Detail behavior, pinned scroll.
 - [ ] Scale control: native compact segmented style, one sliding indicator, 24px
       items with 8px inline padding, one Tab stop with arrow/Home/End movement,
       and no first-mount motion.

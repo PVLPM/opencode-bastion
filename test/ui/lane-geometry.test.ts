@@ -70,13 +70,17 @@ describe("laneGeometry", () => {
     ]);
   });
 
-  it("anchors a delegation from the source's right center to the child's left center", () => {
-    const source = block("ses_root", 0);
+  it("starts a delegation at the call and lands at the child's left center", () => {
     const target = block("ses_fixer_a", 0);
     const link = geometry().connectors.find((item) => item.id === "call_a");
     const points = pathPoints(link?.d ?? "");
-    expect(points[0]).toEqual({ x: source.x + source.width, y: 36 });
+    expect(points[0]).toEqual({ x: START + 40, y: 36 });
     expect(points.at(-1)).toEqual({ x: target.x, y: 64 });
+  });
+
+  it("starts a follow-up at its call", () => {
+    const link = geometry().connectors.find((item) => item.id === "call_a2");
+    expect(pathPoints(link?.d ?? "")[0]).toEqual({ x: START + 340, y: 36 });
   });
 
   it("lands an inserted follow-up in the child at the call's time and mid-height", () => {
@@ -87,37 +91,35 @@ describe("laneGeometry", () => {
     expect(pathPoints(link?.d ?? "").at(-1)).toEqual({ x: START + 420, y: 64 });
   });
 
-  it.each([
-    ["not started", 42, 38],
-    ["at now and zero width", 50, 50],
-  ])("falls back to call x when the source is %s", (_name, start, time) => {
-    const root = lane("ses_root", "Orchestrator", [[start, undefined]], true);
+  it("starts a handoff at the call when no root block contains it", () => {
+    const root = lane("ses_root", "Orchestrator", [[42, undefined]], true);
     const child = lane("ses_child", "Fixer", [
       [0, 20],
       [40, undefined],
     ]);
-    const call = handoff("call", "ses_child", time, "ses_child:1");
+    const call = handoff("call", "ses_child", 38, "ses_child:1");
     const result = geometry(50, lanesView([root, child], [call]));
-    expect(pathPoints(result.connectors[0]?.d ?? "")[0]?.x).toBe(START + time * 10);
+    expect(pathPoints(result.connectors[0]?.d ?? "")[0]?.x).toBe(START + 380);
   });
 
-  it("lets a label run past a short block, stopping before the next one", () => {
+  it("keeps a label inside its block and stops it before the next block", () => {
     const [first, second] = geometry().lanes[0]?.blocks ?? [];
-    expect(first).toMatchObject({ x: START, width: 100, labelWidth: 300 - 6 });
-    expect(second?.labelWidth).toBe(START + 500 - 6 - (second?.x ?? 0));
+    expect(first).toMatchObject({ x: START, width: 100, labelWidth: 100 });
+    expect(second?.labelWidth).toBe(second?.width);
   });
 
-  it("keeps a label that repeats its subagent lane title inside the execution", () => {
-    const child = {
-      ...lane("ses_child", "Fixer", [
-        [0, 10],
-        [30, 40],
-      ]),
-      title: "Fixer 0",
-    };
-    const [title, followup] = geometry(50, lanesView([child])).lanes[0]?.blocks ?? [];
-    expect(title?.labelWidth).toBe(title?.width);
-    expect(followup?.labelWidth).toBeGreaterThan(followup?.width ?? 0);
+  it.each([
+    ["too narrow", 0.5, 0],
+    ["three characters wide", 0.75, 30],
+  ])("hides the label on a block %s", (_name, seconds, labelWidth) => {
+    const root = lane("ses_root", "Orchestrator", [[0, seconds]], true);
+    const block = geometry(50, lanesView([root])).lanes[0]?.blocks[0];
+    expect(block?.labelWidth).toBe(labelWidth);
+  });
+
+  it("never gives a label more room than its block", () => {
+    for (const lane of geometry().lanes)
+      for (const block of lane.blocks) expect(block.labelWidth).toBeLessThanOrEqual(block.width);
   });
   it("keeps follow-ups and drops calls whose child block is unknown", () => {
     const view = familyLanes();

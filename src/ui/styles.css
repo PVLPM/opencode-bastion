@@ -1213,7 +1213,6 @@
 
 .bn-lane[data-root="true"] {
   background: var(--bn-hover);
-  --bn-label-bg: linear-gradient(var(--bn-hover), var(--bn-hover)), var(--bn-panel-bg);
 }
 
 .bn-lane__watermark {
@@ -1324,51 +1323,30 @@
 }
 
 /*
- * The label is its own layer: full tone over the block, a quieter tone where it
- * runs on into the empty lane, and an ellipsis only before the next block.
+ * The label is its own layer inside the block: full tone while live or failed,
+ * muted when done or unknown, ellipsized before the next block.
  */
 .bn-block__label {
-  --bn-inside-tone: var(--bn-muted);
-
   position: absolute;
   top: 4px;
   z-index: 3;
   height: 20px;
   overflow: hidden;
-  padding-inline: calc(var(--bn-label-offset) + 6px) 2px;
+  padding-inline: 6px 2px;
+  color: var(--bn-muted);
   line-height: 20px;
   pointer-events: none;
   white-space: nowrap;
 }
 
-.bn-block__label::before {
-  position: absolute;
-  z-index: -1;
-  inset: 3px 0 3px var(--bn-inside);
-  background: var(--bn-label-bg, var(--bn-panel-bg));
-  content: "";
-}
-
 .bn-block__label > span {
   display: block;
   overflow: hidden;
-  background: linear-gradient(
-    to right,
-    var(--bn-inside-tone) calc(var(--bn-inside) - 6px),
-    var(--bn-faint) calc(var(--bn-inside) - 6px)
-  );
-  background-clip: text;
-  color: transparent;
   text-overflow: ellipsis;
 }
 
-.bn-block__label[data-short] > span {
-  background: none;
-  color: var(--bn-muted);
-}
-
 .bn-block__label:is([data-status="running"], [data-status="waiting"], [data-status="failed"]) {
-  --bn-inside-tone: var(--bn-text);
+  color: var(--bn-text);
 }
 
 .bn-block__label[data-enter="true"] {

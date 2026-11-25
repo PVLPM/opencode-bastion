@@ -213,6 +213,9 @@ start, and the order is stable.
   lands on the child block running at call time, else the next block to start. A
   second call to the same child is a follow-up. There are no child→child
   connectors and no inference from overlapping time.
+- Only a real user prompt labels an orchestrator block. Internal synthetic
+  messages from plugins and host continuations never become a block label, block
+  text or lane-tip prompt; a block without one falls back to the lane title.
 
 ### Geometry
 
@@ -249,31 +252,29 @@ grows at the current scale's rate (one pixel per second at the Detail floor). A
 new block draws in with a 320ms clip-path wipe; its label fades in over 240ms
 after an 80ms delay. Focus is the standard 2px focus outline.
 
-### Labels that may overflow a block
+### Labels inside a block
 
-The label is a separate layer from the block:
+The label is a layer over its own block:
 
-- Inside the block it uses the full tone (`--bn-text` for running/waiting/failed,
-  `--bn-muted` for done).
-- Past the block's right edge it continues in `--bn-faint`, over a background
-  that masks whatever is underneath.
-- It stops before the next block on that lane, leaving a 6px gap. If less than
-  18px remains, the label is hidden.
-- A block narrower than 36px shows no inner label; when the overflow has room, its
-  label lives only beyond the block and uses `--bn-muted`.
-- A child label that merely repeats the lane/title is capped to the block width,
-  so long titles do not flood the lane.
+- It starts at the block's left edge and is clipped inside the block, up to a 6px
+  gap before the next block on that lane.
+- It uses the full tone (`--bn-text` for running/waiting/failed, `--bn-muted` for
+  done and unknown) and ellipsizes when the text does not fit.
+- A block narrower than three characters plus inline padding (26px) shows no
+  label; below that a clipped word says nothing. The full text stays in the
+  tooltip.
 - The lane label itself is the agent name, ellipsized at 92px; the session title
   is the tooltip. Child lanes also carry a quiet right-aligned watermark of the
   title at 37% opacity.
 
 ### Handoff curves
 
-A connector runs from the right edge of the orchestrator block that issued the
-call, at that block's vertical center, to the left edge of the child block at its
-center. When the source block is missing or zero-width it falls back to the
-call's exact x. A follow-up inserted inside the child block's duration lands at
-the call's exact x, still mid-height.
+A connector starts at the call's exact x on the orchestrator lane, at that lane's
+vertical center, and lands at the left edge of the child block at its center. A
+follow-up inserted inside the child block's duration lands at the call's exact x,
+still mid-height. Starting at the call, not at the source block's right edge,
+keeps the line from bending backwards to a child block that started after it; the
+source block lookup identifies the origin for emphasis only.
 
 It is one bounded cubic with a horizontal tangent at each end; there are no
 elbows. The control handles are clamped inside the plot, and at the live now

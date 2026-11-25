@@ -112,13 +112,13 @@ Lanes:
 
 - [ ] One lane per session, root first; the block is as long as the execution and
       a live block reaches `now`. Nothing is drawn past the now line.
-- [ ] Labels stay readable: full tone inside the block, faint beyond it, stopped
-      before the next block, hidden when there is no room. A block under 36px has
-      no inner label, only the overflow one.
-- [ ] Handoff curves run from the source block's right edge (or the call x when
-      it is missing or zero-width) to the child's left edge (call x for an
-      inserted follow-up): one cubic, no elbow or caret, drawn once over 220ms;
-      follow-ups use the tighter dash.
+- [ ] Labels stay inside their block, ellipsized before the next block, with the
+      full text in the tooltip; a block under 26px (three characters plus padding)
+      shows no label. Only a real user prompt labels an orchestrator block;
+      internal synthetic messages leave it to the lane title.
+- [ ] Handoff curves start at the call's x on the orchestrator lane and land at
+      the child's left edge (call x for an inserted follow-up): one cubic, no
+      elbow or caret, drawn once over 220ms; follow-ups use the tighter dash.
 - [ ] Connectors are quiet until one endpoint is hovered or focused.
 - [ ] Fit shows the whole session; Detail is linear and scrolls. The default
       choice matches `DESIGN.md`; Fit settles over 160ms only on whole-pixel

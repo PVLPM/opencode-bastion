@@ -46,11 +46,6 @@ interface ChildLane {
   readonly blocks: readonly DraftBlock[];
 }
 
-function nonEmpty(text: string | undefined): string | undefined {
-  const trimmed = text?.trim();
-  return trimmed === undefined || trimmed === "" ? undefined : trimmed;
-}
-
 function outcomeStatus(outcome: SessionMessageIdle["outcome"]): AgentStatus {
   if (outcome === "succeeded") return "done";
   if (outcome === "failed") return "failed";
@@ -63,23 +58,28 @@ interface PromptDraft {
   readonly at: number;
 }
 
+/** Only a real user prompt carries text; synthetic internal messages label nothing. */
 function promptOf(message: SessionMessageInfo): PromptDraft | undefined {
-  if (message.type === "user") {
-    return { id: message.id, text: promptText(message), at: message.time.created };
-  }
-  if (message.type === "synthetic") {
-    return {
-      id: message.id,
-      text: nonEmpty(message.description) ?? nonEmpty(message.text),
-      at: message.time.created,
-    };
-  }
-  return undefined;
+  if (message.type !== "user") return undefined;
+  return { id: message.id, text: promptText(message), at: message.time.created };
+}
+
+interface TriggerDraft {
+  readonly id: string;
+  readonly at: number;
+}
+
+/** A message that can open a run: a real prompt or an internal synthetic injection. */
+function triggerOf(message: SessionMessageInfo): TriggerDraft | undefined {
+  if (message.type !== "user" && message.type !== "synthetic") return undefined;
+  return { id: message.id, at: message.time.created };
 }
 
 /**
- * The first prompt after the last idle: the message that started the run. An
- * idle marker is a hard boundary, so an older prompt never labels a new block.
+ * The boundary message that started the run, after the last idle. An idle marker
+ * is a hard boundary, so an older prompt never labels a new block. A synthetic
+ * injection opens the block but keeps the earliest real prompt text found in the
+ * run, so it can never replace what the user asked for.
  */
 function promptBefore(
   messages: readonly SessionMessageInfo[],
@@ -90,8 +90,9 @@ function promptBefore(
     const message = messages[cursor];
     if (message === undefined) continue;
     if (message.type === "idle") break;
-    const candidate = promptOf(message);
-    if (candidate !== undefined) prompt = candidate;
+    const trigger = triggerOf(message);
+    if (trigger === undefined) continue;
+    prompt = { ...trigger, text: promptOf(message)?.text ?? prompt?.text };
   }
   return prompt;
 }
