@@ -115,6 +115,27 @@ describe("FleetPanel", () => {
     expect(counter?.hasAttribute("tabindex")).toBe(false);
   });
 
+  it("caveats recorded and estimated cost as loaded-message based", () => {
+    const host = mountPanel({
+      fleet: testFleet(testRoot({ cost: { usd: 1.2, estimated: true } }), [
+        runningChild({ cost: { usd: 0.3, estimated: false } }),
+      ]),
+      ui: {
+        ...uiStub,
+        Tooltip: (props) => <span data-tooltip={String(props.value)}>{props.children}</span>,
+      },
+    });
+
+    const tips = [...host.querySelectorAll('[data-tooltip*="loaded messages"]')];
+    expect(tips.length).toBeGreaterThanOrEqual(2);
+    for (const tip of tips) {
+      expect(tip.getAttribute("data-tooltip")).toContain("may be incomplete");
+    }
+    expect(host.querySelector(".bn-head__cost")?.getAttribute("title")).toContain(
+      "loaded messages",
+    );
+  });
+
   it("keeps the existing root card mounted across fleet revisions", () => {
     const [fleet, setFleet] = createSignal(sampleFleet());
     const host = mountPanel({ readFleet: fleet });

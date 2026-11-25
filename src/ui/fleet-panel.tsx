@@ -6,6 +6,7 @@ import type { Ui } from "@opencode/plugin/gui";
 import { AgentCard } from "./agent-card";
 import { AgentLanes } from "./agent-lanes";
 import { Connections } from "./connections";
+import { COST_EXPLANATION } from "./cost-copy";
 import { createFlip } from "./flip";
 import { createKeyed } from "./keyed";
 import { reduceMotion } from "./motion";
@@ -138,7 +139,7 @@ export function FleetPanel(props: FleetPanelProps) {
                 </Show>
                 <Show when={fleet().totalCost}>
                   {(cost) => (
-                    <span class="bn-head__cost" title="Known family cost">
+                    <span class="bn-head__cost" title={COST_EXPLANATION}>
                       <RollingMoney value={cost()} />
                     </span>
                   )}

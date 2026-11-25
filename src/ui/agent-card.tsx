@@ -3,6 +3,7 @@ import { Show, createSignal, type JSX } from "solid-js";
 import type { AgentView, LineStats } from "../model/types";
 import type { Ui } from "@opencode/plugin/gui";
 import { ContextRing, contextSummary } from "./context-ring";
+import { COST_EXPLANATION } from "./cost-copy";
 import {
   formatClock,
   formatElapsed,
@@ -210,16 +211,13 @@ export function AgentCard(props: AgentCardProps) {
             </Show>
             <span class="bn-metrics__cost">
               <Show when={props.agent.cost}>
-                {(cost) => {
-                  const amount = <RollingMoney value={cost()} />;
-                  return (
-                    <Show when={cost().estimated} fallback={amount}>
-                      <Tooltip value="Estimated at API list price">
-                        <span class="bn-metrics__tip">{amount}</span>
-                      </Tooltip>
-                    </Show>
-                  );
-                }}
+                {(cost) => (
+                  <Tooltip value={COST_EXPLANATION}>
+                    <span class="bn-metrics__tip">
+                      <RollingMoney value={cost()} />
+                    </span>
+                  </Tooltip>
+                )}
               </Show>
             </span>
             <span class="bn-metrics__context">

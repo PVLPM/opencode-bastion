@@ -496,10 +496,10 @@ labels and axis, which is why the panel is usable at 320px.
   OpenCode's recorded cost wins; a zero-cost request is estimated from the host's
   own model rates, else models.dev list prices, applying the request's own
   context tier. The session total is the reported cumulative cost plus estimates
-  for its loaded zero-cost requests, shown with `~` and the tooltip `Estimated at
-  API list price` when any estimate applies. The value covers loaded messages
-  only and may be incomplete: title, generate and reverted usage has no message,
-  so token totals are not a completeness proof. If a zero-cost request cannot be
+  for its loaded zero-cost requests. `~` marks a value with estimates. The cost
+  tooltip says the value covers loaded messages and may be incomplete: title,
+  generate and reverted usage has no message, so token totals are not a
+  completeness proof. If a zero-cost request cannot be
   priced, or a session with no reported cost has no loaded usage at all, cost is
   absent rather than understated. The header total is the reported family total
   plus only the estimated share of each member, so nothing is counted twice; a

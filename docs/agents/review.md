@@ -47,10 +47,11 @@ one and why.
 - [ ] Activity text contains no reasoning, prompt, command or file contents.
 - [ ] Cost: OpenCode's reported value wins; estimates only for loaded zero-cost
       requests, each priced at its own route after native history pagination; `~`
-      and the list-price tooltip; no double counting; an unpriced member makes the
-      family total absent rather than understated. Loaded-message estimates are
-      caveated: title, generate and reverted usage has no message, and token
-      totals are never treated as a completeness certificate.
+      and the loaded-message caveat tooltip; no double counting; an unpriced
+      member makes the family total absent rather than understated.
+      Loaded-message estimates are caveated: title, generate and reverted usage
+      has no message, and token totals are never treated as a completeness
+      certificate.
 - [ ] Context: latest token-bearing assistant over the limit of the model that
       produced it; no ring for zero/unknown limits or after a completed
       compaction.

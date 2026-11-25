@@ -51,9 +51,10 @@ Add the absolute path of this folder to `plugins` in your OpenCode config
   loaded request is priced on its own route: OpenCode's recorded cost wins; a
   zero-cost request is estimated from the host's model rates, else models.dev
   list prices, using that request's own model and context tier. `~` marks a value
-  with estimates. The total covers loaded messages only and may be incomplete:
-  OpenCode's ledger also includes title, generate and reverted usage that has no
-  message, so token totals are never used as proof of completeness. If a
+  with estimates. The cost tooltip says the value covers loaded messages and may
+  be incomplete: OpenCode's ledger also includes title, generate and reverted
+  usage that has no message, so token totals are never used as proof of
+  completeness. If a
   zero-cost request cannot be priced, or a session with no reported cost has no
   loaded usage at all, cost is Unknown rather than understated. The header total
   starts from the family total OpenCode reports and adds only the estimated share
