@@ -344,7 +344,8 @@ export function createFleetSource(host: FleetHost): FleetSource {
       children,
       descendants,
       // A cost total is only claimed once the family sync resolved and every
-      // indexed member has info; otherwise the estimate could cover less.
+      // indexed member has info; otherwise the estimate could cover less. The
+      // index is the host's known family for this root, not a full tree crawl.
       familyComplete: familyReady() === familyKey(current) && infos.length === ids.length,
     };
   });

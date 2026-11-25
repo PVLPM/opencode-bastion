@@ -54,16 +54,19 @@ Add the absolute path of this folder to `plugins` in your OpenCode config
   with estimates. The cost tooltip says the value covers loaded messages and may
   be incomplete: OpenCode's ledger also includes title, generate and reverted
   usage that has no message, so token totals are never used as proof of
-  completeness. If a
-  zero-cost request cannot be priced, or a session with no reported cost has no
-  loaded usage at all, cost is Unknown rather than understated. The header total
-  starts from the family total OpenCode reports and adds only the estimated share
-  of each member, so nothing is counted twice. That is not your subscription
-  spend. `claude-agent` is Anthropic CLI routing for subscription use; its
-  unversioned aliases are resolved from the host's model metadata and display
-  name, never a hardcoded version, and its estimate uses Anthropic list prices,
-  so it is an API-list-price equivalent. An alias estimate uses the alias's
-  current listed tariff, not the rate in effect when the request ran.
+  completeness. If a zero-cost request cannot be priced, cost is Unknown rather
+  than understated. A session with no reported cost shows $0 only when its ledger
+  tokens are also zero; positive ledger usage with no loaded message is Unknown.
+  The header total starts from the family total OpenCode reports and adds only
+  the estimated share of each member, so nothing is counted twice. It covers the
+  family OpenCode knows about for the routed root; a nested agent the host has
+  not registered is not discovered by Bastion. That is not your subscription
+  spend.
+  `claude-agent` is Anthropic CLI routing for subscription use; its unversioned
+  aliases are resolved from the host's model metadata and display name, never a
+  hardcoded version, and its estimate uses Anthropic list prices, so it is an
+  API-list-price equivalent. An alias estimate uses the alias's current listed
+  tariff, not the rate in effect when the request ran.
 - **Context** is the latest token-bearing assistant turn over the context limit
   of the model that produced those tokens. No limit, zero limit or a completed
   compaction shows no ring.

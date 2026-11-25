@@ -422,8 +422,9 @@ export interface SessionPriceInput {
  * also includes title, generate and reverted usage that has no message. The
  * result therefore covers loaded messages only and may be incomplete.
  *
- * A session with nothing reported and no loaded request that carries usage is
- * unknown rather than priced at one model's tariff.
+ * A session with nothing reported and zero ledger tokens is a measured $0.
+ * Positive ledger usage with no loaded message evidence is unknown rather than
+ * priced at one model's tariff.
  */
 export function priceSession(input: SessionPriceInput): SessionPrice {
   if (!Number.isFinite(input.base) || input.base < 0) {

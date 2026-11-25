@@ -66,9 +66,10 @@ const COST_EPSILON = 1e-9;
  * The reported family sum already covers every member's reported cost, so only
  * the estimated share is added; that share is the whole estimate for a member
  * with no reported cost. Any member that cannot be priced leaves the family
- * total unknown instead of silently undercounting it. Records that report a
- * cost the native base does not contain are contradictory, so they leave the
- * total unknown too.
+ * total unknown instead of silently undercounting it. A zero-native-cost member
+ * whose records report more than its estimate is contradictory, so it leaves
+ * the total unknown too. The member set is the host's known family for this
+ * root, not a recursive crawl of every nested session.
  */
 function familyTotal(
   input: FleetInput,

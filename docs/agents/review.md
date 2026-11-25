@@ -51,7 +51,12 @@ one and why.
       member makes the family total absent rather than understated.
       Loaded-message estimates are caveated: title, generate and reverted usage
       has no message, token totals are never treated as a completeness
-      certificate, and an unversioned alias uses its current listed tariff.
+      certificate, and an unversioned alias uses its current listed tariff. A
+      session with no reported cost shows $0 only when its ledger tokens are
+      zero; positive ledger usage without loaded message evidence is absent. The
+      family total covers the host's known family for the routed root, not a
+      recursively crawled tree, and a zero-native-cost member whose records
+      report more than its estimate makes the total absent.
 - [ ] Context: latest token-bearing assistant over the limit of the model that
       produced it; no ring for zero/unknown limits or after a completed
       compaction.
