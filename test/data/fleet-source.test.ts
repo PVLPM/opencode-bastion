@@ -559,6 +559,30 @@ describe("createFleetSource history", () => {
     });
   });
 
+  it("cancels the active backfill when the routed root disappears", async () => {
+    const window = historyMessages(20, 80);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }), messages: window }],
+      messagesOnSync: { "ses-root": window },
+      olderMessages: { "ses-root": historyMessages(20, 60) },
+    });
+    const release = fake.holdNextLoadMore("ses-root");
+
+    await withSource(fake.host, async () => {
+      await flush();
+      expect(fake.calls.messageLoadMores).toHaveLength(1);
+
+      fake.deleteSession("ses-root");
+      await flush();
+      expect(fake.loadSignal("ses-root")?.aborted).toBe(true);
+
+      release();
+      await flush();
+      expect(fake.calls.messageLoadMores).toHaveLength(1);
+    });
+  });
+
   it("hydrates descendants that only feed cost and its tariffs", async () => {
     const fake = createFakeHost({
       routed: "ses-root",

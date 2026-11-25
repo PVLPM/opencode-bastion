@@ -478,12 +478,20 @@ export function createFleetSource(host: FleetHost): FleetSource {
 
   createEffect(() => {
     const current = family();
-    if (current === undefined || !current.connected) return;
+    const active = backfill;
+    if (current === undefined) {
+      // A deleted root has no family left to queue, but its load still has to stop.
+      if (active !== undefined) {
+        abortBackfill();
+        bumpHistory();
+      }
+      return;
+    }
+    if (!current.connected) return;
     const scope = scopeKey(current);
     // Every settled page asks for the next member; one load runs at a time.
     historyRevision();
     const members = [current.root, ...current.children, ...current.descendants];
-    const active = backfill;
     if (active !== undefined) {
       // A deleted member must free the single-flight slot for the rest.
       if (members.some((info) => info.id === active.sessionID)) return;

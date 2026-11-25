@@ -123,6 +123,7 @@ export function createFakeHost(options: FakeHostOptions = {}) {
   const failSessionSyncs = new Set(options.failSessionSyncOnce ?? []);
   const failMessageSyncs = new Set(options.failMessageSyncOnce ?? []);
   const failLoadMores = new Set<string>();
+  const loadSignals = new Map<string, AbortSignal | undefined>();
   const nextSyncs = new Map<
     string,
     { messages: readonly SessionMessageInfo[]; older: readonly SessionMessageInfo[] }
@@ -273,6 +274,7 @@ export function createFakeHost(options: FakeHostOptions = {}) {
         loadMore: (sessionID, loadOptions) => {
           messageLoadMores.push({ id: sessionID, all: loadOptions?.all === true });
           const signal = loadOptions?.signal;
+          loadSignals.set(sessionID, signal);
           if (signal?.aborted) return Promise.resolve();
           if (messageMore()[sessionID] !== true) return Promise.resolve();
           if (failLoadMores.delete(sessionID)) {
@@ -420,6 +422,7 @@ export function createFakeHost(options: FakeHostOptions = {}) {
       nextSyncs.set(sessionID, { messages, older });
     },
     setMessageMore: setMore,
+    loadSignal: (sessionID: string) => loadSignals.get(sessionID),
     failLoadMoreOnce: (sessionID: string) => {
       failLoadMores.add(sessionID);
     },
