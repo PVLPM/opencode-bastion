@@ -19,9 +19,9 @@ export interface DelegationCall {
   readonly at: number | undefined;
 }
 
-/** Every confirmed subagent call in transcript order, including follow-ups. */
+/** Every confirmed subagent call by tool id, first-seen order; repeated rows collapse. */
 export function delegationCalls(rootMessages: readonly SessionMessageInfo[]): DelegationCall[] {
-  const calls: DelegationCall[] = [];
+  const calls = new Map<string, DelegationCall>();
   for (const message of rootMessages) {
     if (message.type !== "assistant") continue;
     for (const part of message.content) {
@@ -31,7 +31,7 @@ export function delegationCalls(rootMessages: readonly SessionMessageInfo[]): De
       if (childID === undefined) continue;
       const ran = part.time.ran;
       const at = ran !== undefined && Number.isFinite(ran) ? ran : part.time.created;
-      calls.push({
+      calls.set(part.id, {
         toolID: part.id,
         childID,
         agent: jsonText(part.state.input.agent) ?? "subagent",
@@ -40,7 +40,7 @@ export function delegationCalls(rootMessages: readonly SessionMessageInfo[]): De
       });
     }
   }
-  return calls;
+  return [...calls.values()];
 }
 
 export function delegations(rootMessages: readonly SessionMessageInfo[]): Map<string, Delegation> {

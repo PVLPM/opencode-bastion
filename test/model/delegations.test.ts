@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  delegationCalls,
   delegations,
   detectBeams,
   subagentCalls,
@@ -21,6 +22,18 @@ function subagentTool(
     : makeTool({ ...values, metadata: { sessionID: childID } });
 }
 describe("delegations", () => {
+  it("counts a repeated tool part once", () => {
+    const message = makeAssistant({
+      id: "r1",
+      content: [subagentTool("tool-1", "ses-child", "Design")],
+    });
+
+    const calls = delegationCalls([message, message]);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.toolID).toBe("tool-1");
+  });
+
   it("maps a subagent call to its child session", () => {
     const found = delegations([
       makeAssistant({ content: [subagentTool("tool-1", "ses-child", "Design the panel")] }),

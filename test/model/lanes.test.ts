@@ -461,6 +461,31 @@ describe("deriveLanes handoffs", () => {
     expect(view.lanes[1]?.blocks[0]?.label).toBe("First task");
   });
 
+  it("does not invent a follow-up for a repeated delegation row", () => {
+    const call = makeAssistant({
+      id: "r1",
+      created: 100,
+      content: [subagentCall("call-1", "ses-child", "First task", 100)],
+    });
+    const root = laneSession({ messages: [call, call] });
+    const child = laneSession({
+      id: "ses-child",
+      parentID: "ses-root",
+      created: 50,
+      running: true,
+      messages: [makeAssistant({ id: "c1", created: 60 })],
+    });
+
+    const view = deriveLanes(lanesInput({ root, children: [child] }));
+
+    expect(view.handoffs).toHaveLength(1);
+    expect(view.handoffs[0]).toMatchObject({
+      childID: "ses-child",
+      kind: "delegate",
+      blockID: "ses-child:c1",
+    });
+  });
+
   it("lands a follow-up after the child idled on the next block", () => {
     const root = laneSession({
       messages: [
