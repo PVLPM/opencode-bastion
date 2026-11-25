@@ -819,6 +819,13 @@
   overflow-wrap: anywhere;
 }
 
+.bn-dl__provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
 /* Agent Lanes ------------------------------------------------------------- */
 /*
  * Row metrics (axis 22 px, lane 28 px, block 20 px) mirror `lane-geometry.ts`.

@@ -78,7 +78,7 @@ describe("buildFleet", () => {
   });
 
   it("leaves context unknown when the model has no usable limit", () => {
-    const label: ModelLabel = { providerID: "p", modelID: "m", name: "M" };
+    const label: ModelLabel = { providerID: "p", providerName: "P", modelID: "m", name: "M" };
     const input = fleetInput({
       root: snapshot({
         messages: [makeAssistant({ tokens: makeTokens({ input: 10 }) })],
@@ -343,7 +343,12 @@ describe("buildFleet", () => {
         root: snapshot({ model: sessionModel, messages }),
         modelLabel: (_location, ref) => {
           refs.push(ref);
-          return { providerID: "anthropic", modelID: "claude", name: "claude" };
+          return {
+            providerID: "anthropic",
+            providerName: "Anthropic",
+            modelID: "claude",
+            name: "claude",
+          };
         },
       }),
     ).root;

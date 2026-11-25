@@ -16,12 +16,30 @@ const NOW = Date.now();
 
 export const now = NOW;
 
+const PROVIDER_NAMES = new Map<string, string>([
+  ["anthropic", "Anthropic"],
+  ["openai", "OpenAI"],
+  ["google", "Google"],
+  ["mistral", "Mistral"],
+  ["deepseek", "DeepSeek"],
+  ["moonshotai", "Moonshot AI"],
+  ["xai", "xAI"],
+  ["openrouter", "OpenRouter"],
+  ["alibaba", "Alibaba"],
+  ["claude-agent", "Claude Agent"],
+  ["opencode", "OpenCode"],
+  ["groq", "Groq"],
+  ["zai", "Z.ai"],
+  ["meta", "Meta"],
+]);
+
 const model = (
   name: string,
   providerID = "anthropic",
   modelID = "claude-opus-4-5",
 ): ModelLabel => ({
   providerID,
+  providerName: PROVIDER_NAMES.get(providerID) ?? providerID,
   modelID,
   name,
 });

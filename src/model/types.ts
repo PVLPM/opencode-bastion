@@ -16,6 +16,8 @@ export type ErrorKind =
 export interface ModelLabel {
   readonly providerID: string;
   readonly modelID: string;
+  /** Catalog display name for the provider, else the provider id. */
+  readonly providerName: string;
   /** Catalog display name, else the model id. */
   readonly name: string;
 }

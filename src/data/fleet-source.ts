@@ -38,6 +38,7 @@ export interface FleetData {
   readonly location: {
     readonly agent: Pick<Data["location"]["agent"], "list" | "sync">;
     readonly model: Pick<Data["location"]["model"], "list" | "sync">;
+    readonly provider: Pick<Data["location"]["provider"], "list" | "sync">;
   };
 }
 
@@ -142,6 +143,13 @@ function modelFor(data: FleetData, location: LocationRef, ref: ModelRef): ModelI
   return data.location.model
     .list(location)
     ?.find((model) => model.providerID === ref.providerID && model.modelID === ref.id);
+}
+
+function providerNameFor(data: FleetData, location: LocationRef, providerID: string): string {
+  return (
+    data.location.provider.list(location)?.find((provider) => provider.id === providerID)?.name ??
+    providerID
+  );
 }
 
 function agentNameFor(data: FleetData, info: SessionInfo): string {
@@ -311,6 +319,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
     for (const [key, location] of locations) {
       syncOnce(`${scope}\nagents\n${key}`, () => data.location.agent.sync(location));
       syncOnce(`${scope}\nmodels\n${key}`, () => data.location.model.sync(location));
+      syncOnce(`${scope}\nproviders\n${key}`, () => data.location.provider.sync(location));
     }
 
     for (const info of members) {
@@ -383,6 +392,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
           : {
               providerID: ref.providerID,
               modelID: ref.id,
+              providerName: providerNameFor(data, location, ref.providerID),
               name: modelFor(data, location, ref)?.name ?? ref.id,
             },
       contextLimit: (location, ref) =>

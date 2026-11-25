@@ -249,12 +249,20 @@ export function AgentCard(props: AgentCardProps) {
                 </Show>
                 <Show when={props.agent.model}>
                   {(model) => (
-                    <Detail label="Model">
-                      {model().name}
-                      <Show when={props.agent.effort}>
-                        {(effort) => ` ${effortLabel(effort())}`}
-                      </Show>
-                    </Detail>
+                    <>
+                      <Detail label="Provider">
+                        <span class="bn-dl__provider">
+                          <ProviderLogo providerID={model().providerID} />
+                          <span>{model().providerName}</span>
+                        </span>
+                      </Detail>
+                      <Detail label="Model">
+                        {model().name}
+                        <Show when={props.agent.effort}>
+                          {(effort) => ` ${effortLabel(effort())}`}
+                        </Show>
+                      </Detail>
+                    </>
                   )}
                 </Show>
                 <Show when={props.agent.startedAt}>

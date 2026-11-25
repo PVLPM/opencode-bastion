@@ -15,6 +15,7 @@ import {
   makeAssistant,
   makeIdle,
   makeModel,
+  makeProvider,
   makeSession,
   makeTokens,
   makeTool,
@@ -302,6 +303,63 @@ describe("createFleetSource syncing", () => {
       expect(source.fleet()?.active[0]?.context).toStrictEqual({ used: 20, limit: 200 });
       expect([...new Set(fake.calls.modelSyncs)]).toHaveLength(2);
       expect([...new Set(fake.calls.agentSyncs)]).toHaveLength(2);
+    });
+  });
+
+  it("syncs each location's provider catalog and labels models with its name", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({
+            id: "ses-root",
+            location: { directory: "C:\\root" },
+            model: { id: "m", providerID: "p" },
+          }),
+        },
+        {
+          info: makeSession({
+            id: "ses-child",
+            parentID: "ses-root",
+            created: 2,
+            location: { directory: "C:\\child" },
+            model: { id: "m", providerID: "p" },
+          }),
+          status: "running",
+        },
+      ],
+      providersByLocation: {
+        "C:\\root": [makeProvider({ id: "p", name: "Root Provider" })],
+        "C:\\child": [makeProvider({ id: "p", name: "Child Provider" })],
+      },
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+
+      expect(source.fleet()?.root.model?.providerName).toBe("Root Provider");
+      expect(source.fleet()?.active[0]?.model?.providerName).toBe("Child Provider");
+      expect([...new Set(fake.calls.providerSyncs)]).toHaveLength(2);
+    });
+  });
+
+  it("falls back to the provider id when the catalog has no entry", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({
+            id: "ses-root",
+            model: { id: "m", providerID: "missing-provider" },
+          }),
+        },
+      ],
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+
+      expect(source.fleet()?.root.model?.providerName).toBe("missing-provider");
     });
   });
 

@@ -89,8 +89,9 @@ status mark and the disclosure sit above it so their tooltips and clicks work.
    context ring even when the ring is absent.
 
 The disclosure reveals a definition list (72px label column) with Agent, Session,
-Task, Now, Model, Time, Context, Total tokens, Input, Output, Cache read, Cache
-write, Cost and Lines when each exists. The Agent row always carries the full
+Task, Now, Provider, Model, Time, Context, Total tokens, Input, Output,
+Cache read, Cache write, Cost and Lines when each exists. The Provider row carries
+the provider mark and catalog display name. The Agent row always carries the full
 agent name, since the badge may be truncated. The task shows the full available
 text, without a nested scrollbar. Duration and cost are hidden only when unknown.
 

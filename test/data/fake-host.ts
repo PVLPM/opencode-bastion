@@ -5,6 +5,7 @@ import type {
   LocationRef,
   ModelInfo,
   PermissionRequest,
+  ProviderInfo,
   SessionInfo,
   SessionMessageInfo,
 } from "@opencode/client/promise";
@@ -35,8 +36,10 @@ export interface FakeHostOptions {
   readonly messagesOnSync?: Readonly<Record<string, readonly SessionMessageInfo[]>>;
   readonly agents?: AgentInfo[];
   readonly models?: ModelInfo[];
+  readonly providers?: ProviderInfo[];
   readonly agentsByLocation?: Readonly<Record<string, AgentInfo[]>>;
   readonly modelsByLocation?: Readonly<Record<string, ModelInfo[]>>;
+  readonly providersByLocation?: Readonly<Record<string, ProviderInfo[]>>;
   readonly diff?: (sessionID: string) => Promise<FileDiffInfo[]>;
   readonly prices?: () => Promise<PriceTable>;
   readonly sessionGate?: Promise<void>;
@@ -112,6 +115,7 @@ export function createFakeHost(options: FakeHostOptions = {}) {
   const messageHolds = new Map<string, { promise: Promise<void>; release: () => void }>();
   const agentsByLocation = options.agentsByLocation ?? {};
   const modelsByLocation = options.modelsByLocation ?? {};
+  const providersByLocation = options.providersByLocation ?? {};
 
   const sessionSyncs: { id: string; children: boolean }[] = [];
   const messageSyncs: string[] = [];
@@ -119,6 +123,7 @@ export function createFakeHost(options: FakeHostOptions = {}) {
   const formSyncs: string[] = [];
   const agentSyncs: string[] = [];
   const modelSyncs: string[] = [];
+  const providerSyncs: string[] = [];
   const diffCalls: string[] = [];
   const openTabs: { server: string; id: string }[] = [];
   let priceFetches = 0;
@@ -238,6 +243,13 @@ export function createFakeHost(options: FakeHostOptions = {}) {
           return Promise.resolve();
         },
       },
+      provider: {
+        list: (ref) => providersByLocation[locationKey(ref)] ?? options.providers ?? [],
+        sync: (ref) => {
+          providerSyncs.push(locationKey(ref));
+          return Promise.resolve();
+        },
+      },
     },
   };
 
@@ -332,6 +344,7 @@ export function createFakeHost(options: FakeHostOptions = {}) {
       formSyncs,
       agentSyncs,
       modelSyncs,
+      providerSyncs,
       diffCalls,
       openTabs,
       priceFetches: () => priceFetches,

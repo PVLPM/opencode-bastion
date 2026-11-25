@@ -7,6 +7,7 @@ import type {
   PromptAgentAttachment,
   PromptFileAttachment,
   PromptSkillAttachment,
+  ProviderInfo,
   SessionInfo,
   SessionMessageAssistant,
   SessionMessageAssistantTool,
@@ -262,6 +263,20 @@ export function makeError(
   const error: SessionStructuredError = { type, message };
   if (status !== undefined) error.status = status;
   return error;
+}
+
+export interface ProviderValues {
+  id?: string;
+  name?: string;
+}
+
+export function makeProvider(values: ProviderValues = {}): ProviderInfo {
+  return {
+    id: values.id ?? "anthropic",
+    name: values.name ?? "Anthropic",
+    activation: "enabled",
+    package: "@ai-sdk/anthropic",
+  };
 }
 
 export interface ModelValues {

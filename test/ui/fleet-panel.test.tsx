@@ -281,6 +281,23 @@ describe("FleetPanel", () => {
     expect(value("Cost")).toBe("$0.30");
   });
 
+  it("names the provider in the details beside its logo", () => {
+    const host = mountPanel({ fleet: sampleFleet() });
+    const more = host.querySelector<HTMLButtonElement>(
+      '[data-bn-card="ses_child_a"] [data-bn-more]',
+    );
+    more?.click();
+
+    const details = host.querySelector("#bn-details-ses_child_a");
+    const rows = [...(details?.querySelectorAll(".bn-dl__row") ?? [])];
+    const labels = rows.map((row) => row.querySelector("dt")?.textContent);
+    const provider = rows.find((row) => row.querySelector("dt")?.textContent === "Provider");
+
+    expect(labels.indexOf("Provider")).toBeLessThan(labels.indexOf("Model"));
+    expect(provider?.querySelector(".bn-dl__provider")?.textContent?.trim()).toBe("Anthropic");
+    expect(provider?.querySelector(".bn-dl__provider .bn-logo")).not.toBeNull();
+  });
+
   it("shows the empty state without a fleet", () => {
     const host = mountPanel({ fleet: undefined });
 
