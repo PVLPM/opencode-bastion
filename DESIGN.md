@@ -78,11 +78,12 @@ status mark and the disclosure sit above it so their tooltips and clicks work.
    activity is the live, concise tool description. The `•` separator only appears
    when both exist. The task is capped at 50%; the ticker takes the rest and
    clips.
-3. **Meta** — `[logo] Model #Effort ……… lines duration tokens cost context-ring chevron`.
+3. **Meta** — `[logo] Model Effort ……… lines duration tokens cost context-ring chevron`.
    The provider mark sits in a 14px optical box, 4px from the model name; a
    provider with no vendored mark shows no logo. Effort is the model variant
-   actually observed on the latest assistant message, displayed as `#Medium`; it
-   is never inferred from the model name. Metrics are right-aligned with an 8px
+   actually observed on the latest assistant message, displayed as secondary
+   text `Medium`; it is never inferred from the model name. Metrics are
+   right-aligned with an 8px
    gap and tabular numbers. The token metric is the cumulative session total,
    including reasoning and cache reads and writes; the chevron is a 24×24
    disclosure button that rotates 180° when open. At wide card widths a 14px slot
@@ -105,11 +106,13 @@ wins; otherwise: `Reading <file>`, `Writing <file>`, `Editing <file>`,
 `Running tests`, `Installing packages`, `Building`, `Linting`, `Formatting`,
 `Type-checking`, `Checking changes`, `Updating git`, `Searching files`,
 `Listing files`, `Reading files`, `Fetching a URL`, falling back to
-`Running Shell`. `Thinking…`, `Writing response…`, `Starting…` and
-`Retrying request…` cover the rest. The raw command, pattern, path contents and
-file contents are never shown. Waiting appends `…` to its reason; task and prompt
-text appear only in the task row, the details, the lane labels and the lane
-tooltip.
+`Running Shell`. `Thinking…`, `Writing response…`, `Starting…`, `Working…` and
+`Retrying request…` cover the rest. A running agent always shows an activity:
+once the last part has finished, the card says `Working…` instead of leaving the
+previous tool on screen or going blank. The raw command, pattern, path contents
+and file contents are never shown. Waiting appends `…` to its reason; task and
+prompt text appear only in the task row, the details, the lane labels and the
+lane tooltip.
 
 ### Rolling money
 

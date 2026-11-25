@@ -67,7 +67,9 @@ Cards:
       grows the card.
 - [ ] The status mark matches the status, sits on the right, and its tooltip and
       accessible name say the same thing.
-- [ ] The `•` separator appears only when both task and activity exist.
+- [ ] The `•` separator appears only when both task and activity exist. A running
+      card always has an activity; a finished part never keeps its old label and
+      the gap is `Working…`.
 - [ ] Live cards are raised; finished cards are sunken with a hairline; the routed
       card has its inset ring; hover and press do not move the layout.
 - [ ] The metrics order is lines, duration, total tokens, cost, context ring,
@@ -83,8 +85,9 @@ Cards:
       Changes row, and its tooltip says the directory listing was truncated.
 - [ ] The header token total is the known total for loaded sessions, as its title
       says.
-- [ ] The provider logo sits in a 14px optical box 4px from the model name; wide
-      layouts reserve the context-ring slot.
+- [ ] The provider logo sits in a 14px optical box 4px from the model name; the
+      observed effort is secondary text with no prefix; wide layouts reserve the
+      context-ring slot.
 - [ ] Clicking the card body opens the session; clicking the disclosure expands
       details without opening; a missing session cannot be opened.
 - [ ] Details expand and collapse without a jump, and closed details are not
