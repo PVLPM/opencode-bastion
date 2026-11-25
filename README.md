@@ -62,7 +62,8 @@ Add the absolute path of this folder to `plugins` in your OpenCode config
   spend. `claude-agent` is Anthropic CLI routing for subscription use; its
   unversioned aliases are resolved from the host's model metadata and display
   name, never a hardcoded version, and its estimate uses Anthropic list prices,
-  so it is an API-list-price equivalent.
+  so it is an API-list-price equivalent. An alias estimate uses the alias's
+  current listed tariff, not the rate in effect when the request ran.
 - **Context** is the latest token-bearing assistant turn over the context limit
   of the model that produced those tokens. No limit, zero limit or a completed
   compaction shows no ring.

@@ -130,10 +130,11 @@ describe("FleetPanel", () => {
     expect(tips.length).toBeGreaterThanOrEqual(2);
     for (const tip of tips) {
       expect(tip.getAttribute("data-tooltip")).toContain("may be incomplete");
+      expect(tip.getAttribute("data-tooltip")).toContain("current listed tariff");
     }
-    expect(host.querySelector(".bn-head__cost")?.getAttribute("title")).toContain(
-      "loaded messages",
-    );
+    const header = host.querySelector(".bn-head__cost")?.getAttribute("title") ?? "";
+    expect(header).toContain("loaded messages");
+    expect(header).toContain("current listed tariff");
   });
 
   it("keeps the existing root card mounted across fleet revisions", () => {

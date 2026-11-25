@@ -50,8 +50,8 @@ one and why.
       and the loaded-message caveat tooltip; no double counting; an unpriced
       member makes the family total absent rather than understated.
       Loaded-message estimates are caveated: title, generate and reverted usage
-      has no message, and token totals are never treated as a completeness
-      certificate.
+      has no message, token totals are never treated as a completeness
+      certificate, and an unversioned alias uses its current listed tariff.
 - [ ] Context: latest token-bearing assistant over the limit of the model that
       produced it; no ring for zero/unknown limits or after a completed
       compaction.

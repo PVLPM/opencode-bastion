@@ -509,7 +509,9 @@ labels and axis, which is why the panel is usable at 320px.
   subscription use. Its unversioned aliases are resolved from the host's model
   metadata and display name, never a hardcoded version, and priced with Anthropic
   list prices, so the estimate is an API-list-price equivalent, not subscription
-  spend. It stays estimated (`~`) like any other estimate.
+  spend. It stays estimated (`~`) like any other estimate. An alias estimate
+  uses the alias's current listed tariff, not the rate in effect when the
+  request ran.
 - **Context**: the latest token-bearing assistant over the context limit of the
   model that produced those tokens. No limit, zero limit or a completed
   compaction means no ring.
