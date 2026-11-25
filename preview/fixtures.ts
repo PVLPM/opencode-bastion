@@ -44,6 +44,7 @@ function agent(init: AgentInit): AgentView {
     statusDetail: undefined,
     activity: undefined,
     task: undefined,
+    taskText: init.task,
     startedAt: undefined,
     endedAt: undefined,
     cost: undefined,

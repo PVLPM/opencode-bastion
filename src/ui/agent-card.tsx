@@ -218,7 +218,7 @@ export function AgentCard(props: AgentCardProps) {
                 <Show when={props.agent.title}>
                   {(title) => <Detail label="Session">{title()}</Detail>}
                 </Show>
-                <Show when={props.agent.task}>
+                <Show when={props.agent.taskText}>
                   {(task) => (
                     <Detail label="Task">
                       <span class="bn-dl__task">{task()}</span>

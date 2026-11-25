@@ -437,16 +437,13 @@
 
 .bn-task {
   flex: 0 1 auto;
+  max-width: 50%;
   min-width: 0;
   overflow: hidden;
   color: var(--bn-muted);
   font-size: 12px;
   font-weight: 440;
   text-overflow: ellipsis;
-}
-
-.bn-row--work:has(.bn-sep) .bn-task {
-  max-width: 58%;
 }
 
 .bn-sep {
@@ -800,11 +797,9 @@
 }
 
 .bn-dl__task {
-  display: -webkit-box;
-  overflow: hidden;
+  display: block;
   white-space: pre-wrap;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
+  overflow-wrap: anywhere;
 }
 
 /* Agent Lanes ------------------------------------------------------------- */

@@ -134,34 +134,130 @@ describe("buildFleet", () => {
     expect(fleet.active[0]?.task).toBe("Final pass");
   });
 
+  it("carries the full native subagent description beside its first line", () => {
+    const rootMessages = [
+      makeAssistant({
+        content: [subagentCall("tool-1", "ses-child", "First line\nMore native detail")],
+      }),
+    ];
+    const input = fleetInput({
+      root: snapshot({ messages: rootMessages }),
+      children: [snapshot({ id: "ses-child", running: true })],
+    });
+    const child = buildFleet(input).active[0];
+
+    expect(child?.task).toBe("First line");
+    expect(child?.taskText).toBe("First line\nMore native detail");
+  });
+
+  it("keeps a blank subagent description out of both task fields", () => {
+    const rootMessages = [
+      makeAssistant({ content: [subagentCall("tool-1", "ses-child", "  \n ")] }),
+    ];
+    const input = fleetInput({
+      root: snapshot({ messages: rootMessages }),
+      children: [snapshot({ id: "ses-child", running: true })],
+    });
+    const child = buildFleet(input).active[0];
+
+    expect(child?.task).toBeUndefined();
+    expect(child?.taskText).toBeUndefined();
+  });
+
   interface TaskCase {
     readonly name: string;
     readonly messages: readonly SessionMessageInfo[];
     readonly expected: string | undefined;
+    readonly expectedText: string | undefined;
   }
+
+  const mention = (text: string, token: string) => {
+    const start = text.indexOf(token);
+    return { start, end: start + token.length, text: token };
+  };
+
+  const mentionedPrompt = "@Fixer @skill-name @src/a.ts Fix the login flow";
 
   const taskCases: readonly TaskCase[] = [
     {
-      name: "uses the first non-empty line of the latest user prompt",
-      messages: [makeUser(10, "Old prompt"), makeUser(20, "\n\n  Fix the bug  \nwith details")],
+      name: "uses the first non-empty line of the latest user prompt and keeps the full text",
+      messages: [makeUser(10, "Old prompt"), makeUser(20, "Fix the bug\nwith details")],
       expected: "Fix the bug",
+      expectedText: "Fix the bug\nwith details",
     },
     {
       name: "ignores a latest prompt with no text",
       messages: [makeUser(10, "Old prompt"), makeUser(20, "  \n ")],
       expected: undefined,
+      expectedText: undefined,
     },
     {
       name: "has no task without a user prompt",
       messages: [makeAssistant()],
       expected: undefined,
+      expectedText: undefined,
+    },
+    {
+      name: "prefers the native display text over the formatted message text",
+      messages: [
+        makeUser(20, "Fix the bug\n\n@src/a.ts", {
+          displayText: "Fix the bug",
+        }),
+      ],
+      expected: "Fix the bug",
+      expectedText: "Fix the bug",
+    },
+    {
+      name: "removes matching file, agent and skill mention spans",
+      messages: [
+        makeUser(20, "Fallback text", {
+          displayText: mentionedPrompt,
+          files: [
+            {
+              data: "",
+              mime: "text/plain",
+              source: { type: "inline" },
+              mention: mention(mentionedPrompt, "@src/a.ts"),
+            },
+          ],
+          agents: [{ name: "Fixer", mention: mention(mentionedPrompt, "@Fixer") }],
+          skills: [
+            {
+              id: "skill-name",
+              name: "skill-name",
+              mention: mention(mentionedPrompt, "@skill-name"),
+            },
+          ],
+        }),
+      ],
+      expected: "Fix the login flow",
+      expectedText: "Fix the login flow",
+    },
+    {
+      name: "leaves a mention span that no longer matches intact",
+      messages: [
+        makeUser(20, "Fallback text", {
+          displayText: "Keep @src/a.ts here",
+          files: [
+            {
+              data: "",
+              mime: "text/plain",
+              source: { type: "inline" },
+              mention: { start: 5, end: 14, text: "@other.ts" },
+            },
+          ],
+        }),
+      ],
+      expected: "Keep @src/a.ts here",
+      expectedText: "Keep @src/a.ts here",
     },
   ];
 
-  it.each(taskCases)("orchestrator task $name", ({ messages, expected }) => {
+  it.each(taskCases)("orchestrator task $name", ({ messages, expected, expectedText }) => {
     const fleet = buildFleet(fleetInput({ root: snapshot({ messages }) }));
 
     expect(fleet.root.task).toBe(expected);
+    expect(fleet.root.taskText).toBe(expectedText);
   });
 
   interface EffortCase {

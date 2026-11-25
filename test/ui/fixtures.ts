@@ -17,6 +17,7 @@ function testAgent(init: AgentInit): AgentView {
     statusDetail: undefined,
     activity: undefined,
     task: undefined,
+    taskText: init.task,
     startedAt: TEST_NOW - 10_000,
     endedAt: undefined,
     cost: undefined,

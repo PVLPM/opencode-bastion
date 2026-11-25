@@ -4,6 +4,9 @@ import type {
   JsonValue,
   ModelInfo,
   ModelRef,
+  PromptAgentAttachment,
+  PromptFileAttachment,
+  PromptSkillAttachment,
   SessionInfo,
   SessionMessageAssistant,
   SessionMessageAssistantTool,
@@ -192,8 +195,29 @@ export function makeCompactionCompleted(
   return message;
 }
 
-export function makeUser(created = 0, text = "Do the work"): SessionMessageUser {
-  return { id: `msg-user-${created}`, time: { created }, type: "user", text };
+export interface UserValues {
+  readonly displayText?: string;
+  readonly files?: readonly PromptFileAttachment[];
+  readonly agents?: readonly PromptAgentAttachment[];
+  readonly skills?: readonly PromptSkillAttachment[];
+}
+
+export function makeUser(
+  created = 0,
+  text = "Do the work",
+  values: UserValues = {},
+): SessionMessageUser {
+  const message: SessionMessageUser = {
+    id: `msg-user-${created}`,
+    time: { created },
+    type: "user",
+    text,
+  };
+  if (values.displayText !== undefined) message.metadata = { displayText: values.displayText };
+  if (values.files !== undefined) message.files = [...values.files];
+  if (values.agents !== undefined) message.agents = [...values.agents];
+  if (values.skills !== undefined) message.skills = [...values.skills];
+  return message;
 }
 
 export interface SyntheticValues {

@@ -56,6 +56,8 @@ export interface AgentView {
    * of its latest user prompt. Never the session title.
    */
   readonly task: string | undefined;
+  /** The full available task text for the details; `task` keeps its first line. */
+  readonly taskText: string | undefined;
   readonly startedAt: number | undefined;
   /** Set once the session is idle. */
   readonly endedAt: number | undefined;

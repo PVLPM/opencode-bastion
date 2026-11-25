@@ -73,9 +73,11 @@ status mark and the disclosure sit above it so their tooltips and clicks work.
 2. **Work** — `Task • Activity`.
    The task is the newest delegation description for a subagent, or the first
    line of its latest user prompt for the orchestrator; never the session title.
-   The activity is the live, concise tool description. The `•` separator only
-   appears when both exist. With both, the task is capped at 58%; the ticker
-   takes the rest and clips.
+   The orchestrator prompt is the native display text with native mention spans
+   removed when they still match. The details carry the full task text. The
+   activity is the live, concise tool description. The `•` separator only appears
+   when both exist. The task is capped at 50%; the ticker takes the rest and
+   clips.
 3. **Meta** — `[logo] Model #Effort ……… lines duration cost context-ring chevron`.
    The provider mark sits in a 14px optical box, 4px from the model name; a
    provider with no vendored mark shows no logo. Effort is the model variant
@@ -87,8 +89,9 @@ status mark and the disclosure sit above it so their tooltips and clicks work.
 
 The disclosure reveals a definition list (56px label column) with Agent, Session,
 Task, Now, Model, Time, Context, Cost and Lines when each exists. The Agent row
-always carries the full agent name, since the badge may be truncated. The task is
-clamped to four lines. Duration and cost are hidden only when unknown.
+always carries the full agent name, since the badge may be truncated. The task
+shows the full available text, without a nested scrollbar. Duration and cost are
+hidden only when unknown.
 
 Activity wording is generated from the tool part. A tool-provided description
 wins; otherwise: `Reading <file>`, `Writing <file>`, `Editing <file>`,
@@ -442,8 +445,8 @@ gives way in this order:
 
 Cost and duration never drop, and the model name gives way first. The agent badge
 is capped at 62% (48% below 300px) and the title ellipsizes; the task is capped at
-58% when the activity is also present. The panel's vertical rhythm never depends
-on text length: every row is a fixed height.
+50%. The panel's vertical rhythm never depends on text length: every row is a
+fixed height.
 
 The lanes region does not squeeze: in Detail it scrolls horizontally with sticky
 labels and axis, which is why the panel is usable at 320px.
