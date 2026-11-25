@@ -282,6 +282,13 @@ const activityCases: readonly ActivityCase[] = [
     expected: "Starting…",
   },
   {
+    name: "an assistant with no parts is working",
+    messages: [makeAssistant()],
+    status: "running",
+    detail: undefined,
+    expected: "Working…",
+  },
+  {
     name: "an incomplete reasoning part is thinking",
     messages: [makeAssistant({ content: [{ type: "reasoning", text: "hidden" }] })],
     status: "running",
@@ -289,7 +296,7 @@ const activityCases: readonly ActivityCase[] = [
     expected: "Thinking…",
   },
   {
-    name: "a completed reasoning part is not thinking",
+    name: "a completed reasoning part is working",
     messages: [
       makeAssistant({
         content: [{ type: "reasoning", text: "hidden", time: { created: 0, completed: 1 } }],
@@ -297,7 +304,7 @@ const activityCases: readonly ActivityCase[] = [
     ],
     status: "running",
     detail: undefined,
-    expected: undefined,
+    expected: "Working…",
   },
   {
     name: "text in an incomplete message is writing a response",
@@ -307,11 +314,11 @@ const activityCases: readonly ActivityCase[] = [
     expected: "Writing response…",
   },
   {
-    name: "text in a completed message is not writing",
+    name: "text in a completed message is working",
     messages: [makeAssistant({ completed: 5, content: [{ type: "text", text: "hidden" }] })],
     status: "running",
     detail: undefined,
-    expected: undefined,
+    expected: "Working…",
   },
   {
     name: "only the last content part matters",
@@ -328,11 +335,11 @@ const activityCases: readonly ActivityCase[] = [
     expected: "Reading b.ts",
   },
   {
-    name: "a completed tool part has no activity",
+    name: "a completed tool part falls back to working",
     messages: [makeAssistant({ content: [makeTool({ status: "completed" })] })],
     status: "running",
     detail: undefined,
-    expected: undefined,
+    expected: "Working…",
   },
   {
     name: "retrying overrides the last content part",

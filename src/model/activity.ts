@@ -224,11 +224,13 @@ export function deriveActivity(
     return "Retrying request…";
   }
 
+  // A running agent between live parts is still working; the host's own view says
+  // the same. A finished part must not keep claiming its old activity.
   const part = assistant.content.at(-1);
-  if (part === undefined) return undefined;
-  if (part.type === "tool") return toolActivity(part);
+  if (part === undefined) return "Working…";
+  if (part.type === "tool") return toolActivity(part) ?? "Working…";
   if (part.type === "reasoning") {
-    return part.time?.completed === undefined ? "Thinking…" : undefined;
+    return part.time?.completed === undefined ? "Thinking…" : "Working…";
   }
-  return assistant.time.completed === undefined ? "Writing response…" : undefined;
+  return assistant.time.completed === undefined ? "Writing response…" : "Working…";
 }
