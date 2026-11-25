@@ -2,10 +2,11 @@ import type { ModelRef, SessionMessageInfo, TokenUsageInfo } from "@opencode/cli
 import { describe, expect, it } from "vitest";
 
 import { buildFleet, type FleetInput, type SessionSnapshot } from "../../src/model/fleet";
-import type { AgentStatus, LineStats, ModelLabel, Money } from "../../src/model/types";
+import type { AgentStatus, LineStats, ModelLabel } from "../../src/model/types";
 import { pillView } from "../../src/ui/pill";
 import {
   makeAssistant,
+  makeCompactionCompleted,
   makeError,
   makeSession,
   makeSynthetic,
@@ -58,8 +59,8 @@ function subagentCall(id: string, childID: string, description: string) {
   });
 }
 
-const perThousand = (tokens: TokenUsageInfo): Money | undefined =>
-  tokens.input > 0 ? { usd: tokens.input / 1_000, estimated: true } : undefined;
+const perThousand: FleetInput["price"] = (_info, _ref, tokens) =>
+  tokens.input > 0 ? tokens.input / 1_000 : undefined;
 
 describe("buildFleet", () => {
   it("shows a just-created child as running and starting", () => {
@@ -517,11 +518,13 @@ describe("buildFleet", () => {
   });
 
   it("adds an estimate only for an unpriced member and keeps reported costs", () => {
+    const tokens = makeTokens({ input: 3_000 });
     const child = snapshot({
       id: "ses-child",
       created: 1,
       running: true,
-      tokens: makeTokens({ input: 3_000 }),
+      tokens,
+      messages: [makeAssistant({ tokens, cost: 0, completed: 1 })],
     });
     const input = fleetInput({
       root: snapshot({ id: "ses-root", cost: 0.7 }),
@@ -537,23 +540,38 @@ describe("buildFleet", () => {
     expect(fleet.active[0]?.cost).toStrictEqual({ usd: 3, estimated: true });
   });
 
-  it("includes a grandchild in the family total", () => {
+  it("includes a grandchild's reported cost without double counting", () => {
     const child = snapshot({ id: "ses-child", created: 1, cost: 0.3 });
     const grandchild = snapshot({
       id: "ses-grandchild",
       parentID: "ses-child",
       created: 2,
-      tokens: makeTokens({ input: 50 }),
+      cost: 0.05,
     });
     const input = fleetInput({
       root: snapshot({ id: "ses-root", cost: 0.4 }),
       children: [child],
       descendants: [child, grandchild],
+      familyCost: 0.75,
+    });
+
+    expect(buildFleet(input).totalCost).toStrictEqual({ usd: 0.75, estimated: false });
+  });
+
+  it("adds only the estimated share for a mixed member", () => {
+    const tokens = makeTokens({ input: 1_000 });
+    const input = fleetInput({
+      root: snapshot({
+        id: "ses-root",
+        cost: 0.7,
+        tokens,
+        messages: [makeAssistant({ tokens, cost: 0, completed: 1 })],
+      }),
       familyCost: 0.7,
       price: perThousand,
     });
 
-    expect(buildFleet(input).totalCost).toStrictEqual({ usd: 0.75, estimated: true });
+    expect(buildFleet(input).totalCost).toStrictEqual({ usd: 1.7, estimated: true });
   });
 
   it("leaves the family total unknown when an unpriced member cannot be priced", () => {
@@ -664,7 +682,7 @@ describe("buildFleet", () => {
         cost: 0.7,
         tokens: makeTokens({ input: 1_000 }),
       }),
-      price: () => ({ usd: 99, estimated: true }),
+      price: () => 99,
       familyCost: 0.7,
     });
     const fleet = buildFleet(input);
@@ -673,26 +691,59 @@ describe("buildFleet", () => {
     expect(fleet.totalCost).toStrictEqual({ usd: 0.7, estimated: false });
   });
 
-  it("prices each member exactly once per build", () => {
+  it("prices each usage record exactly once per build", () => {
     const calls: string[] = [];
+    const tokens = makeTokens({ input: 10 });
     const child = snapshot({
       id: "ses-child",
       running: true,
-      tokens: makeTokens({ input: 10 }),
+      tokens,
       model: { id: "m", providerID: "p" },
+      messages: [
+        makeAssistant({
+          tokens,
+          cost: 0,
+          completed: 1,
+          model: { id: "m", providerID: "p" },
+        }),
+      ],
     });
     const input = fleetInput({
       children: [child],
       descendants: [child],
-      price: (_tokens, ref) => {
+      price: (_info, ref) => {
         calls.push(ref?.id ?? "missing");
-        return { usd: 1, estimated: true };
+        return 1;
       },
     });
 
     buildFleet(input);
 
     expect(calls).toStrictEqual(["m"]);
+  });
+
+  it("passes compaction usage to the price as aggregated", () => {
+    const tokens = makeTokens({ input: 100 });
+    const calls: boolean[] = [];
+    const input = fleetInput({
+      root: snapshot({
+        tokens,
+        messages: [
+          makeCompactionCompleted({
+            tokens,
+            model: { id: "m", providerID: "p" },
+          }),
+        ],
+      }),
+      price: (_info, _ref, _tokens, aggregated) => {
+        calls.push(aggregated);
+        return 0.5;
+      },
+    });
+    const fleet = buildFleet(input);
+
+    expect(calls).toStrictEqual([true]);
+    expect(fleet.root.cost).toStrictEqual({ usd: 0.5, estimated: true });
   });
 
   it("leaves a non-finite family total unknown", () => {

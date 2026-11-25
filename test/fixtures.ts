@@ -81,6 +81,7 @@ export interface AssistantValues {
   content?: SessionMessageAssistant["content"];
   model?: ModelRef;
   tokens?: TokenUsageInfo;
+  cost?: number;
   error?: SessionStructuredError;
   retry?: SessionMessageAssistant["retry"];
 }
@@ -97,6 +98,7 @@ export function makeAssistant(values: AssistantValues = {}): SessionMessageAssis
     content: values.content ?? [],
   };
   if (values.tokens !== undefined) message.tokens = values.tokens;
+  if (values.cost !== undefined) message.cost = values.cost;
   if (values.error !== undefined) message.error = values.error;
   if (values.retry !== undefined) message.retry = values.retry;
   return message;
@@ -182,7 +184,7 @@ export function makeCompactionRunning(created = 0): SessionMessageCompactionRunn
 }
 
 export function makeCompactionCompleted(
-  values: { created?: number; tokens?: TokenUsageInfo } = {},
+  values: { created?: number; tokens?: TokenUsageInfo; cost?: number; model?: ModelRef } = {},
 ): SessionMessageCompactionCompleted {
   const message: SessionMessageCompactionCompleted = {
     type: "compaction",
@@ -193,6 +195,8 @@ export function makeCompactionCompleted(
     summary: "",
   };
   if (values.tokens !== undefined) message.tokens = values.tokens;
+  if (values.cost !== undefined) message.cost = values.cost;
+  if (values.model !== undefined) message.model = values.model;
   return message;
 }
 
@@ -280,27 +284,32 @@ export function makeProvider(values: ProviderValues = {}): ProviderInfo {
 }
 
 export interface ModelValues {
+  id?: string;
   providerID?: string;
   modelID?: string;
+  canonical?: ModelInfo["canonical"];
   name?: string;
   contextLimit?: number;
+  cost?: ModelInfo["cost"];
 }
 
 export function makeModel(values: ModelValues = {}): ModelInfo {
   const providerID = values.providerID ?? "anthropic";
   const modelID = values.modelID ?? "claude";
   const context = values.contextLimit ?? 200_000;
-  return {
-    id: `${providerID}/${modelID}`,
+  const model: ModelInfo = {
+    id: values.id ?? modelID,
     modelID,
     providerID,
     name: values.name ?? modelID,
     capabilities: { tools: true, input: ["text"], output: ["text"] },
     variants: [],
     time: { released: 0 },
-    cost: [{ input: 0, output: 0, cache: { read: 0, write: 0 } }],
+    cost: values.cost ?? [{ input: 0, output: 0, cache: { read: 0, write: 0 } }],
     status: "active",
     enabled: true,
     limit: { context, output: context },
   };
+  if (values.canonical !== undefined) model.canonical = values.canonical;
+  return model;
 }

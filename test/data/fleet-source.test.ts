@@ -950,15 +950,14 @@ describe("createFleetSource prices", () => {
     const table = {
       p: { models: { m: { cost: { input: 3, output: 15 } } } },
     } satisfies PriceTable;
+    const tokens = makeTokens({ input: 1_000_000 });
+    const model = { id: "m", providerID: "p" };
     const fake = createFakeHost({
       routed: "ses-root",
       sessions: [
         {
-          info: makeSession({
-            id: "ses-root",
-            tokens: makeTokens({ input: 1_000_000 }),
-            model: { id: "m", providerID: "p" },
-          }),
+          info: makeSession({ id: "ses-root", tokens, model }),
+          messages: [makeAssistant({ tokens, cost: 0, completed: 1, model })],
         },
       ],
       prices: () => prices,
@@ -1020,15 +1019,14 @@ describe("createFleetSource prices", () => {
         models: { "claude-sonnet-4-5": { cost: { input: 4, output: 20 } } },
       },
     } satisfies PriceTable;
+    const tokens = makeTokens({ input: 1_000_000, output: 1_000_000 });
+    const model = { id: "claude-sonnet-4-5", providerID: "claude-agent" };
     const fake = createFakeHost({
       routed: "ses-root",
       sessions: [
         {
-          info: makeSession({
-            id: "ses-root",
-            tokens: makeTokens({ input: 1_000_000, output: 1_000_000 }),
-            model: { id: "claude-sonnet-4-5", providerID: "claude-agent" },
-          }),
+          info: makeSession({ id: "ses-root", tokens, model }),
+          messages: [makeAssistant({ tokens, cost: 0, completed: 1, model })],
         },
       ],
       prices: () => Promise.resolve(table),
@@ -1041,7 +1039,32 @@ describe("createFleetSource prices", () => {
     });
   });
 
-  it("adds only the grandchild's estimate to the reported family total", async () => {
+  it("includes a grandchild's reported cost in the family total", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        { info: makeSession({ id: "ses-root", cost: 0.4 }) },
+        { info: makeSession({ id: "ses-child", parentID: "ses-root", cost: 0.3, created: 2 }) },
+        {
+          info: makeSession({
+            id: "ses-grandchild",
+            parentID: "ses-child",
+            created: 3,
+            cost: 0.05,
+          }),
+        },
+      ],
+      prices: () => Promise.resolve({}),
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(source.fleet()?.totalCost).toStrictEqual({ usd: 0.75, estimated: false });
+      expect(source.fleet()?.active).toStrictEqual([]);
+    });
+  });
+
+  it("leaves the family total unknown for a zero-cost grandchild without loaded usage", async () => {
     const table = {
       p: { models: { m: { cost: { input: 50, output: 0 } } } },
     } satisfies PriceTable;
@@ -1066,8 +1089,104 @@ describe("createFleetSource prices", () => {
     await withSource(fake.host, async (source) => {
       await flush();
       await flush();
-      expect(source.fleet()?.totalCost).toStrictEqual({ usd: 0.75, estimated: true });
-      expect(source.fleet()?.active).toStrictEqual([]);
+      expect(source.fleet()?.totalCost).toBeUndefined();
+    });
+  });
+
+  it("uses the host's own rates for the exact route", async () => {
+    const tokens = makeTokens({ input: 1_000_000 });
+    const model = { id: "m", providerID: "p" };
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root", tokens, model }),
+          messages: [makeAssistant({ tokens, cost: 0, completed: 1, model })],
+        },
+      ],
+      models: [
+        makeModel({
+          providerID: "p",
+          modelID: "m",
+          id: "m",
+          cost: [{ input: 2, output: 0, cache: { read: 0, write: 0 } }],
+        }),
+      ],
+      prices: () =>
+        Promise.resolve({
+          p: { models: { m: { cost: { input: 99, output: 0 } } } },
+        } satisfies PriceTable),
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      await flush();
+      expect(source.fleet()?.root.cost).toStrictEqual({ usd: 2, estimated: true });
+    });
+  });
+
+  it("prices a subscription alias through its native display name", async () => {
+    const table = {
+      anthropic: {
+        models: {
+          "claude-sonnet-5-5": {
+            name: "Claude Sonnet 5.5",
+            cost: { input: 2, output: 10 },
+          },
+        },
+      },
+    } satisfies PriceTable;
+    const tokens = makeTokens({ input: 1_000_000 });
+    const model = { id: "sonnet", providerID: "claude-agent" };
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root", tokens, model }),
+          messages: [makeAssistant({ tokens, cost: 0, completed: 1, model })],
+        },
+      ],
+      models: [
+        makeModel({
+          providerID: "claude-agent",
+          modelID: "sonnet",
+          id: "sonnet",
+          name: "Sonnet 5.5",
+          cost: [],
+        }),
+      ],
+      prices: () => Promise.resolve(table),
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      await flush();
+      expect(source.fleet()?.root.cost).toStrictEqual({ usd: 2, estimated: true });
+    });
+  });
+
+  it("fetches prices for a mixed session and adds only its unpriced share", async () => {
+    const tokens = makeTokens({ input: 1_000 });
+    const model = { id: "m", providerID: "p" };
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        {
+          info: makeSession({ id: "ses-root", cost: 0.5, tokens, model }),
+          messages: [makeAssistant({ tokens, cost: 0, completed: 1, model })],
+        },
+      ],
+      prices: () =>
+        Promise.resolve({
+          p: { models: { m: { cost: { input: 1, output: 0 } } } },
+        } satisfies PriceTable),
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(fake.calls.priceFetches()).toBe(1);
+      await flush();
+      expect(source.fleet()?.root.cost).toStrictEqual({ usd: 0.501, estimated: true });
     });
   });
 });

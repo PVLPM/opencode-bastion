@@ -486,16 +486,21 @@ labels and axis, which is why the panel is usable at 320px.
 - A value with no evidence is absent; it is not replaced by a guess or a
   placeholder. Zero appears only when zero is the measured value. No invented
   percentages, statuses or model names.
-- **Cost**: OpenCode's reported cost wins. A session with no reported cost and
-  zero tokens is exactly `$0.00`; a session with tokens but no reported cost is
-  estimated from models.dev list prices and shown with `~` and the tooltip
-  `Estimated at API list price`; if no price matches, cost is absent. The header
-  total is the reported family total plus estimates only for members that had no
-  reported cost, so nothing is counted twice; if such a member cannot be priced,
-  the total is absent rather than understated. `claude-agent` is Anthropic CLI
-  routing for subscription use; it is priced with Anthropic list prices, so the
-  estimate is an API-list-price equivalent, not subscription spend. It stays
-  estimated (`~`) like any other estimate.
+- **Cost**: each completed request is priced on its own route. OpenCode's
+  recorded cost wins; a zero-cost request is estimated from the host's own model
+  rates, else models.dev list prices, applying the request's own context tier.
+  The session total is the reported cumulative cost plus estimates for its
+  zero-cost requests, shown with `~` and the tooltip `Estimated at API list price`
+  when any estimate applies. If a zero-cost request cannot be priced, or a
+  session with no reported cost has a loaded history shorter than its cumulative
+  tokens, cost is absent rather than understated. The header total is the reported
+  family total plus only the estimated share of members that had a reported cost,
+  or the whole estimate for members that had none, so nothing is counted twice;
+  if any member cannot be priced, the total is absent. `claude-agent` is Anthropic
+  CLI routing for subscription use. Its unversioned aliases are resolved from the
+  host's model metadata and display name, never a hardcoded version, and priced
+  with Anthropic list prices, so the estimate is an API-list-price equivalent, not
+  subscription spend. It stays estimated (`~`) like any other estimate.
 - **Context**: the latest token-bearing assistant over the context limit of the
   model that produced those tokens. No limit, zero limit or a completed
   compaction means no ring.

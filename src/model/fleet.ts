@@ -7,6 +7,7 @@ import type {
 
 import { deriveActivity, firstLine } from "./activity";
 import { delegations } from "./delegations";
+import { priceSession, usageRecords, type SessionPrice } from "./pricing";
 import { promptText } from "./prompt";
 import { deriveStatus, latestAssistant } from "./status";
 import type { AgentView, FleetView, LineStats, ModelLabel, Money, TokenStats } from "./types";
@@ -30,46 +31,54 @@ export interface FleetInput {
   agentName(info: SessionInfo): string;
   modelLabel(location: SessionInfo["location"], ref?: ModelRef): ModelLabel | undefined;
   contextLimit(location: SessionInfo["location"], ref?: ModelRef): number | undefined;
-  price(tokens: TokenUsageInfo, ref?: ModelRef): Money | undefined;
+  /** Estimated dollars for one usage record, or undefined when its route is unpriceable. */
+  price(
+    info: SessionInfo,
+    ref: ModelRef | undefined,
+    tokens: TokenUsageInfo,
+    aggregated: boolean,
+  ): number | undefined;
   /** Exact reported cost for the whole family, as the store already sums it. */
   familyCost: number;
 }
 
-/** Reported cost wins; otherwise zero tokens are exact and tokens are estimated. */
-function memberCost(input: FleetInput, info: SessionInfo): Money | undefined {
-  if (Number.isFinite(info.cost) && info.cost > 0) {
-    return { usd: info.cost, estimated: false };
-  }
-  const tokens = tokenTotal(info.tokens);
-  if (!Number.isFinite(tokens) || tokens < 0) return undefined;
-  if (tokens === 0) return { usd: 0, estimated: false };
-  const estimate = input.price(info.tokens, info.model);
-  if (estimate === undefined || !Number.isFinite(estimate.usd)) return undefined;
-  return { usd: estimate.usd, estimated: true };
+/** A decided cost and the estimated share the store's cumulative cost omits. */
+function memberCost(input: FleetInput, snapshot: SessionSnapshot): SessionPrice {
+  return priceSession({
+    base: snapshot.info.cost,
+    tokens: snapshot.info.tokens,
+    records: usageRecords(snapshot.messages),
+    price: (ref, tokens, aggregated) => input.price(snapshot.info, ref, tokens, aggregated),
+  });
 }
 
 /**
  * The reported family sum already covers every member the store knows, so only
- * members with no reported cost and real tokens need an estimate added.
+ * the estimated share of zero-cost records is added; a member with no reported
+ * cost contributes its whole estimate. Any member that cannot be priced leaves
+ * the family total unknown instead of silently undercounting it.
  */
 function familyTotal(
   input: FleetInput,
   members: ReadonlyMap<string, SessionSnapshot>,
-  costs: ReadonlyMap<string, Money | undefined>,
+  costs: ReadonlyMap<string, SessionPrice>,
 ): Money | undefined {
   if (!Number.isFinite(input.familyCost)) return undefined;
   let usd = input.familyCost;
   let estimated = false;
   for (const snapshot of members.values()) {
     const info = snapshot.info;
-    if (Number.isFinite(info.cost) && info.cost > 0) continue;
-    const tokens = tokenTotal(info.tokens);
-    if (!Number.isFinite(tokens) || tokens < 0) return undefined;
-    if (tokens === 0) continue;
-    const cost = costs.get(info.id);
-    if (cost === undefined) return undefined;
-    usd += cost.usd;
-    estimated = true;
+    if (!Number.isFinite(info.cost) || info.cost < 0) return undefined;
+    const priced = costs.get(info.id);
+    if (priced === undefined || priced.money === undefined) return undefined;
+    if (info.cost > 0) {
+      const extra = priced.extra ?? 0;
+      usd += extra;
+      if (extra > 0) estimated = true;
+      continue;
+    }
+    usd += priced.money.usd;
+    if (priced.money.estimated) estimated = true;
   }
   return { usd, estimated };
 }
@@ -134,7 +143,7 @@ function agentView(
   snapshot: SessionSnapshot,
   task: string | undefined,
   taskText: string | undefined,
-  costs: ReadonlyMap<string, Money | undefined>,
+  costs: ReadonlyMap<string, SessionPrice>,
 ): AgentView {
   const derived = deriveStatus({
     running: snapshot.running,
@@ -160,7 +169,7 @@ function agentView(
     startedAt: interval.startedAt,
     endedAt: interval.endedAt,
     tokens: sessionTokens(snapshot.info.tokens),
-    cost: costs.get(snapshot.info.id),
+    cost: costs.get(snapshot.info.id)?.money,
     context: contextUsage(snapshot.messages, (ref) =>
       input.contextLimit(snapshot.info.location, ref),
     ),
@@ -192,8 +201,8 @@ export function buildFleet(input: FleetInput): FleetView {
   for (const snapshot of [...input.children, ...input.descendants]) {
     if (!members.has(snapshot.info.id)) members.set(snapshot.info.id, snapshot);
   }
-  const costs = new Map<string, Money | undefined>();
-  for (const [id, snapshot] of members) costs.set(id, memberCost(input, snapshot.info));
+  const costs = new Map<string, SessionPrice>();
+  for (const [id, snapshot] of members) costs.set(id, memberCost(input, snapshot));
 
   const prompt = latestUserPrompt(input.root.messages);
   const root = agentView(input, input.root, prompt?.task, prompt?.taskText, costs);

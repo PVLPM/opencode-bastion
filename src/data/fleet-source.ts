@@ -14,8 +14,8 @@ import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from
 import { detectBeams, subagentCalls, type SubagentCall } from "../model/delegations";
 import { buildFleet, sessionTitle, type SessionSnapshot } from "../model/fleet";
 import { deriveLanes, type LaneSession } from "../model/lanes";
-import { canonicalPriceProvider, resolveCost, type PriceTable } from "../model/pricing";
-import type { AgentStatus, Beam, FleetView, LanesView, LineStats, Money } from "../model/types";
+import { resolveTariff, usageCost, usageRecords, type PriceTable } from "../model/pricing";
+import type { AgentStatus, Beam, FleetView, LanesView, LineStats } from "../model/types";
 import { tokenTotal } from "../model/usage";
 
 export interface FleetData {
@@ -140,9 +140,11 @@ function capitalize(value: string): string {
 }
 
 function modelFor(data: FleetData, location: LocationRef, ref: ModelRef): ModelInfo | undefined {
+  // ModelRef.id is the host route key (`ModelInfo.id`), not the provider's
+  // API model id (`ModelInfo.modelID`).
   return data.location.model
     .list(location)
-    ?.find((model) => model.providerID === ref.providerID && model.modelID === ref.id);
+    ?.find((model) => model.providerID === ref.providerID && model.id === ref.id);
 }
 
 function providerNameFor(data: FleetData, location: LocationRef, providerID: string): string {
@@ -199,19 +201,17 @@ function sumLines(files: readonly FileDiffInfo[]): LineStats {
   return { added, removed, files: real.size, truncated };
 }
 
-function priceFor(
+function priceUsage(
+  data: FleetData,
   table: PriceTable | undefined,
-  tokens: TokenUsageInfo,
+  info: SessionInfo,
   ref: ModelRef | undefined,
-): Money | undefined {
-  if (table === undefined || ref === undefined) return undefined;
-  return resolveCost(
-    0,
-    tokens,
-    { providerID: ref.providerID, modelID: ref.id },
-    table,
-    canonicalPriceProvider(ref.providerID),
-  );
+  tokens: TokenUsageInfo,
+  aggregated: boolean,
+): number | undefined {
+  if (ref === undefined) return undefined;
+  const tariff = resolveTariff({ table, ref, native: modelFor(data, info.location, ref) });
+  return tariff === undefined ? undefined : usageCost(tariff, tokens, aggregated);
 }
 
 export function createFleetSource(host: FleetHost): FleetSource {
@@ -408,7 +408,8 @@ export function createFleetSource(host: FleetHost): FleetSource {
             },
       contextLimit: (location, ref) =>
         ref === undefined ? undefined : modelFor(data, location, ref)?.limit.context,
-      price: (tokens, ref) => priceFor(prices(), tokens, ref),
+      price: (info, ref, tokens, aggregated) =>
+        priceUsage(data, prices(), info, ref, tokens, aggregated),
       familyCost: data.session.cost(current.rootID),
     });
   });
@@ -489,7 +490,12 @@ export function createFleetSource(host: FleetHost): FleetSource {
     if (current === undefined) return;
     const needsEstimate = [current.root, ...current.descendants].some((info) => {
       const tokens = tokenTotal(info.tokens);
-      return info.cost === 0 && Number.isFinite(tokens) && tokens > 0;
+      if (info.cost === 0 && Number.isFinite(tokens) && tokens > 0) return true;
+      // A mixed session reports a base cost but still contains unpriced records.
+      return usageRecords(current.data.session.message.list(info.id)).some((record) => {
+        const total = tokenTotal(record.tokens);
+        return (record.cost ?? 0) === 0 && Number.isFinite(total) && total > 0;
+      });
     });
     if (!needsEstimate) return;
     pricesStarted = true;
