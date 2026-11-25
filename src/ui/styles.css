@@ -609,6 +609,8 @@
 .bn-money__cell {
   position: relative;
   display: inline-block;
+  /* A cell can hold the separator before `tok`; inherited nowrap collapses it. */
+  white-space: pre;
 }
 
 .bn-money__cell[data-digit] {
