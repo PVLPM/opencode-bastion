@@ -110,6 +110,10 @@ function scopeKey(anchor: Anchor): string {
   return `${anchor.serverID}\n${anchor.connected ? "on" : "off"}\n${anchor.rootID}`;
 }
 
+function messageSyncKey(scope: string, sessionID: string): string {
+  return `${scope}\nmessages\n${sessionID}`;
+}
+
 /** Family readiness survives a connection change; only the root/server move it. */
 function familyKey(anchor: Anchor): string {
   return `${anchor.serverID}\n${anchor.rootID}`;
@@ -231,6 +235,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
   const [historyRevision, setHistoryRevision] = createSignal(0);
 
   const synced = new Set<string>();
+  const messageSynced = new Set<string>();
   const historyFailures = new Set<string>();
   const lineKeys = new Map<string, number>();
   const lineRequests = new Map<string, number>();
@@ -284,6 +289,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
     activation += 1;
     abortBackfill();
     synced.clear();
+    messageSynced.clear();
     historyFailures.clear();
     backfillRoot = false;
     setHydration(undefined);
@@ -366,7 +372,8 @@ export function createFleetSource(host: FleetHost): FleetSource {
     }
     abortBackfill(current.routedID);
     historyFailures.delete(current.routedID);
-    synced.delete(`${scope}\nmessages\n${current.routedID}`);
+    synced.delete(messageSyncKey(scope, current.routedID));
+    messageSynced.delete(messageSyncKey(scope, current.routedID));
     bumpHistory();
   });
 
@@ -409,10 +416,11 @@ export function createFleetSource(host: FleetHost): FleetSource {
 
     for (const info of infos) {
       syncOnce(
-        `${scope}\nmessages\n${info.id}`,
+        messageSyncKey(scope, info.id),
         () => data.session.message.sync(info.id),
         () => {
           if (syncScope !== scope) return;
+          messageSynced.add(messageSyncKey(scope, info.id));
           historyFailures.delete(info.id);
           bumpHistory();
           if (info.id === root.id) {
@@ -467,6 +475,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
     if (backfill !== undefined) return;
     const data = current.data;
     for (const info of [current.root, ...current.children, ...current.descendants]) {
+      if (!messageSynced.has(messageSyncKey(scope, info.id))) continue;
       if (historyFailures.has(info.id)) continue;
       if (data.session.message.loading(info.id)) continue;
       if (!data.session.message.more(info.id)) continue;

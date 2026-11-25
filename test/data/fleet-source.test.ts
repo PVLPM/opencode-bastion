@@ -619,6 +619,47 @@ describe("createFleetSource history", () => {
     });
   });
 
+  it("waits for the fresh sync before paging a retained cursor", async () => {
+    const oldWindow = historyMessages(20, 80);
+    const oldOlder = historyMessages(20, 60);
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }), messages: oldWindow }],
+      messagesOnSync: { "ses-root": oldWindow },
+      olderMessages: { "ses-root": oldOlder },
+    });
+    const releaseInitial = fake.holdNextLoadMore("ses-root");
+
+    await withSource(fake.host, async () => {
+      await flush();
+      expect(fake.calls.messageLoadMores).toStrictEqual([{ id: "ses-root", all: true }]);
+
+      fake.setConnected(false);
+      await flush();
+      releaseInitial();
+      await flush();
+      expect(fake.data.session.message.more("ses-root")).toBe(true);
+      expect(fake.data.session.message.list("ses-root")).toHaveLength(20);
+
+      fake.setNextSync("ses-root", historyMessages(20, 90), historyMessages(30, 60));
+      const releaseSync = fake.holdNextMessageSync("ses-root");
+      fake.setConnected(true);
+      await flush();
+      expect(fake.calls.messageLoadMores).toHaveLength(1);
+
+      releaseSync();
+      await flush();
+      await flush();
+
+      expect(fake.calls.messageLoadMores).toHaveLength(2);
+      const list = fake.data.session.message.list("ses-root");
+      expect(list).toHaveLength(50);
+      expect(list[0]?.id).toBe("msg-60");
+      expect(list.at(-1)?.id).toBe("msg-109");
+      expect(fake.data.session.message.more("ses-root")).toBe(false);
+    });
+  });
+
   it("does not refetch when a reconnect retained the full list", async () => {
     const all = historyMessages(200);
     const fake = createFakeHost({

@@ -123,6 +123,10 @@ export function createFakeHost(options: FakeHostOptions = {}) {
   const failSessionSyncs = new Set(options.failSessionSyncOnce ?? []);
   const failMessageSyncs = new Set(options.failMessageSyncOnce ?? []);
   const failLoadMores = new Set<string>();
+  const nextSyncs = new Map<
+    string,
+    { messages: readonly SessionMessageInfo[]; older: readonly SessionMessageInfo[] }
+  >();
   const messageHolds = new Map<string, { promise: Promise<void>; release: () => void }>();
   const loadMoreHolds = new Map<string, { promise: Promise<void>; release: () => void }>();
   const olderRemaining: Record<string, SessionMessageInfo[]> = Object.fromEntries(
@@ -241,11 +245,18 @@ export function createFakeHost(options: FakeHostOptions = {}) {
             return Promise.reject(new Error(`Failed to sync messages for ${sessionID}`));
           }
           const apply = () => {
-            const onSync = options.messagesOnSync?.[sessionID];
-            if (onSync !== undefined) {
-              // A sync replaces the window and resets the older cursor.
-              setMessages((current) => ({ ...current, [sessionID]: [...onSync] }));
-              olderRemaining[sessionID] = [...(options.olderMessages?.[sessionID] ?? [])];
+            const next = nextSyncs.get(sessionID);
+            if (next !== undefined) {
+              nextSyncs.delete(sessionID);
+              setMessages((current) => ({ ...current, [sessionID]: [...next.messages] }));
+              olderRemaining[sessionID] = [...next.older];
+            } else {
+              const onSync = options.messagesOnSync?.[sessionID];
+              if (onSync !== undefined) {
+                // A sync replaces the window and resets the older cursor.
+                setMessages((current) => ({ ...current, [sessionID]: [...onSync] }));
+                olderRemaining[sessionID] = [...(options.olderMessages?.[sessionID] ?? [])];
+              }
             }
             setMore(sessionID, (olderRemaining[sessionID]?.length ?? 0) > 0);
             load(sessionID);
@@ -400,6 +411,13 @@ export function createFakeHost(options: FakeHostOptions = {}) {
       });
       loadMoreHolds.set(sessionID, { promise, release });
       return release;
+    },
+    setNextSync: (
+      sessionID: string,
+      messages: readonly SessionMessageInfo[],
+      older: readonly SessionMessageInfo[],
+    ) => {
+      nextSyncs.set(sessionID, { messages, older });
     },
     failLoadMoreOnce: (sessionID: string) => {
       failLoadMores.add(sessionID);
