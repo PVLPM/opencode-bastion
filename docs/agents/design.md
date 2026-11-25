@@ -77,8 +77,8 @@ Cards:
       while effort shrinks, and at ≤280px the ring goes. Duration remains. Below
       300px the badge is capped at 48%; the details always carry the full Agent
       row.
-- [ ] Details carry the full task, Provider (logo and display name) and the
-      cumulative token rows.
+- [ ] Details carry the full task, Provider (logo and display name), the
+      cumulative token rows and a Changes row with the distinct file count.
 - [ ] The provider logo sits in a 14px optical box 4px from the model name; wide
       layouts reserve the context-ring slot.
 - [ ] Clicking the card body opens the session; clicking the disclosure expands

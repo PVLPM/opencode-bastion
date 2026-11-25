@@ -90,7 +90,7 @@ status mark and the disclosure sit above it so their tooltips and clicks work.
 
 The disclosure reveals a definition list (72px label column) with Agent, Session,
 Task, Now, Provider, Model, Time, Context, Total tokens, Input, Output,
-Cache read, Cache write, Cost and Lines when each exists. The Provider row carries
+Cache read, Cache write, Cost and Changes when each exists. The Provider row carries
 the provider mark and catalog display name. The Agent row always carries the full
 agent name, since the badge may be truncated. The task shows the full available
 text, without a nested scrollbar. Duration and cost are hidden only when unknown.
@@ -427,8 +427,8 @@ Layout is unchanged. Reduced motion is not a different layout.
   `aria-valuemin`/`max`/`now`.
 - Color is never the only signal: status marks use shape (radar, dot, check,
   ring) and always carry an accessible name; waiting and failed share the dot but
-  differ by tone and label. Line counts have an `aria-label`; the context ring
-  states percent and tokens.
+  differ by tone and label. The line count has an `aria-label` that includes the
+  file count; the context ring states percent and tokens.
 - Decorative layers (wires, axis, ticks, grid) carry no accessible content.
 - Lane tooltips open on keyboard focus as well as hover; the card's details
   repeat the same task, timing and usage data.
@@ -480,12 +480,14 @@ labels and axis, which is why the panel is usable at 320px.
   absent; zero is shown when zero is the measured value. The context ring still
   measures the latest token-bearing assistant against its model's limit; it is not
   the cumulative total.
-- **Lines**: the session's own cumulative diff, refreshed from the latest
+- **Changes**: the session's own cumulative diff, refreshed from the latest
   completed assistant turn. An explicit `files: []` describes only that turn, so
   the refresh is skipped and the last known diff is kept until a later completed
   turn changes files; only a scope or session change with no completed assistant
-  clears it. It is not exact per-agent attribution when agents edit the same
-  files, and the card says so in a tooltip.
+  clears it. The line counts and the file count come from the same diff: `files`
+  counts distinct real paths, and a truncation sentinel (`more`) is not a file and
+  contributes no lines. It is not exact per-agent attribution when agents edit the
+  same files, and the card says so in a tooltip.
 - **Effort**: only the observed model variant, else absent.
 - **Status**: only the evidence table above; everything else is Unknown.
 - **Lanes**: only durable transcript evidence; past waiting is not drawn, and a

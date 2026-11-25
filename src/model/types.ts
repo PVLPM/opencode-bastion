@@ -46,6 +46,8 @@ export interface ContextUsage {
 export interface LineStats {
   readonly added: number;
   readonly removed: number;
+  /** Distinct real files in the same session diff; truncation sentinels are excluded. */
+  readonly files: number;
 }
 
 export interface AgentView {

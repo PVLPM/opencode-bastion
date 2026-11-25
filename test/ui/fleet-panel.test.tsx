@@ -98,7 +98,7 @@ describe("FleetPanel", () => {
 
   it("explains the line count's attribution without adding a tab stop", () => {
     const host = mountPanel({
-      fleet: testFleet(testRoot({ lines: { added: 12, removed: 3 } }), []),
+      fleet: testFleet(testRoot({ lines: { added: 12, removed: 3, files: 2 } }), []),
       ui: {
         ...uiStub,
         Tooltip: (props) => <span data-tooltip={String(props.value)}>{props.children}</span>,
@@ -108,7 +108,7 @@ describe("FleetPanel", () => {
     expect(counter?.closest("[data-tooltip]")?.getAttribute("data-tooltip")).toBe(
       "Session file diff — overlapping edits can appear in more than one agent.",
     );
-    expect(counter?.getAttribute("aria-label")).toBe("12 lines added, 3 removed");
+    expect(counter?.getAttribute("aria-label")).toBe("12 lines added, 3 removed, 2 files");
     expect(counter?.hasAttribute("tabindex")).toBe(false);
   });
 
@@ -298,6 +298,29 @@ describe("FleetPanel", () => {
     expect(provider?.querySelector(".bn-dl__provider .bn-logo")).not.toBeNull();
   });
 
+  it.each([
+    ["a files-only change", { added: 0, removed: 0, files: 1 }, "• 1 file"],
+    ["multiple files", { added: 12, removed: 3, files: 2 }, "• 2 files"],
+  ] as const)("shows %s in the Changes details", (_name, lines, expected) => {
+    const host = mountPanel({
+      fleet: testFleet(testRoot(), [runningChild({ lines })]),
+    });
+    const more = host.querySelector<HTMLButtonElement>(
+      '[data-bn-card="ses_child_a"] [data-bn-more]',
+    );
+    more?.click();
+
+    const rows = [
+      ...(host.querySelector("#bn-details-ses_child_a")?.querySelectorAll(".bn-dl__row") ?? []),
+    ];
+    const changes = rows.find((row) => row.querySelector("dt")?.textContent === "Changes");
+
+    expect(changes).not.toBeUndefined();
+    expect(changes?.querySelector(".bn-lines__add")?.textContent).toBe(`+${lines.added}`);
+    expect(changes?.querySelector(".bn-lines__del")?.textContent).toBe(`−${lines.removed}`);
+    expect(changes?.querySelector(".bn-changes__files")?.textContent?.trim()).toBe(expected);
+  });
+
   it("shows the empty state without a fleet", () => {
     const host = mountPanel({ fleet: undefined });
 
@@ -343,7 +366,7 @@ describe("FleetPanel", () => {
         task: "Fix recovery regressions",
         activity: "Running tests…",
         effort: "medium",
-        lines: { added: 12, removed: 3 },
+        lines: { added: 12, removed: 3, files: 2 },
       }),
     ]);
     const card = mountPanel({ fleet }).querySelector('[data-bn-card="ses_child_a"]');

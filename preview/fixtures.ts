@@ -46,7 +46,11 @@ const model = (
 
 const money = (usd: number, estimated = false): Money => ({ usd, estimated });
 
-const lines = (added: number, removed: number): LineStats => ({ added, removed });
+const lines = (added: number, removed: number): LineStats => ({
+  added,
+  removed,
+  files: added === 0 && removed === 0 ? 0 : Math.ceil((added + removed) / 50),
+});
 
 function usage(total: number): TokenStats {
   const input = Math.round(total * 0.35);

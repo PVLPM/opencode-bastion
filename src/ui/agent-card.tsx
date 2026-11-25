@@ -77,7 +77,9 @@ export function AgentCard(props: AgentCardProps) {
   const activity = () => activityLine(props.agent);
   const changed = () => {
     const lines = props.agent.lines;
-    return lines !== undefined && (lines.added > 0 || lines.removed > 0) ? lines : undefined;
+    return lines !== undefined && (lines.added > 0 || lines.removed > 0 || lines.files > 0)
+      ? lines
+      : undefined;
   };
 
   const open = () => {
@@ -157,7 +159,7 @@ export function AgentCard(props: AgentCardProps) {
                   <Tooltip value="Session file diff — overlapping edits can appear in more than one agent.">
                     <span
                       class="bn-lines"
-                      aria-label={`${lines().added} lines added, ${lines().removed} removed`}
+                      aria-label={`${lines().added} lines added, ${lines().removed} removed, ${lines().files} ${lines().files === 1 ? "file" : "files"}`}
                     >
                       <span class="bn-lines__add">+{lines().added}</span>
                       <span class="bn-lines__del">−{lines().removed}</span>
@@ -304,9 +306,17 @@ export function AgentCard(props: AgentCardProps) {
                 </Show>
                 <Show when={changed()}>
                   {(lines) => (
-                    <Detail label="Lines">
-                      <span class="bn-lines__add">+{lines().added}</span>{" "}
-                      <span class="bn-lines__del">−{lines().removed}</span>
+                    <Detail label="Changes">
+                      <span class="bn-changes">
+                        <span class="bn-lines__add">+{lines().added}</span>
+                        <span class="bn-lines__del">−{lines().removed}</span>
+                        <span class="bn-changes__files">
+                          <span class="bn-changes__bullet" aria-hidden="true">
+                            •
+                          </span>{" "}
+                          {lines().files} {lines().files === 1 ? "file" : "files"}
+                        </span>
+                      </span>
                     </Detail>
                   )}
                 </Show>

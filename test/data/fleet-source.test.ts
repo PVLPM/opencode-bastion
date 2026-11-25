@@ -585,7 +585,7 @@ describe("createFleetSource lines", () => {
     await withSource(fake.host, async (source) => {
       await flush();
       expect(fake.calls.diffCalls).toStrictEqual(["ses-root"]);
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 2, removed: 1 });
+      expect(source.fleet()?.root.lines).toStrictEqual({ added: 2, removed: 1, files: 1 });
 
       fake.addMessage("ses-root", makeAssistant({ created: 150, completed: 150 }));
       await flush();
@@ -595,7 +595,61 @@ describe("createFleetSource lines", () => {
       fake.addMessage("ses-root", messageWithSnapshot(200));
       await flush();
       expect(fake.calls.diffCalls).toHaveLength(3);
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 5, removed: 1 });
+      expect(source.fleet()?.root.lines).toStrictEqual({ added: 5, removed: 1, files: 1 });
+    });
+  });
+
+  it("counts each file once when the diff repeats a path", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }), messages: [messageWithSnapshot(100)] }],
+      diff: () =>
+        Promise.resolve([
+          { file: "src/a.ts", patch: "", additions: 2, deletions: 1, status: "modified" },
+          { file: "src/a.ts", patch: "", additions: 9, deletions: 9, status: "modified" },
+        ]),
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(source.fleet()?.root.lines).toStrictEqual({ added: 2, removed: 1, files: 1 });
+    });
+  });
+
+  it("excludes the truncation sentinel from the file count and the lines", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }), messages: [messageWithSnapshot(100)] }],
+      diff: () =>
+        Promise.resolve([
+          { file: "src/a.ts", patch: "", additions: 2, deletions: 1, status: "modified" },
+          {
+            file: "src/truncated.ts",
+            patch: "",
+            additions: 100,
+            deletions: 100,
+            status: "modified",
+            more: true,
+          },
+        ]),
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(source.fleet()?.root.lines).toStrictEqual({ added: 2, removed: 1, files: 1 });
+    });
+  });
+
+  it("reports an empty diff as no changes", async () => {
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [{ info: makeSession({ id: "ses-root" }), messages: [messageWithSnapshot(100)] }],
+      diff: () => Promise.resolve([]),
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(source.fleet()?.root.lines).toStrictEqual({ added: 0, removed: 0, files: 0 });
     });
   });
 
@@ -617,7 +671,7 @@ describe("createFleetSource lines", () => {
     await withSource(fake.host, async (source) => {
       await flush();
       expect(fake.calls.diffCalls).toStrictEqual(["ses-root"]);
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 4, removed: 2 });
+      expect(source.fleet()?.root.lines).toStrictEqual({ added: 4, removed: 2, files: 1 });
     });
   });
 
@@ -657,12 +711,12 @@ describe("createFleetSource lines", () => {
     await withSource(fake.host, async (source) => {
       await flush();
       expect(fake.calls.diffCalls).toStrictEqual(["ses-root"]);
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 3, removed: 2 });
+      expect(source.fleet()?.root.lines).toStrictEqual({ added: 3, removed: 2, files: 1 });
 
       fake.addMessage("ses-root", messageWithSnapshot(200, []));
       await flush();
       expect(fake.calls.diffCalls).toStrictEqual(["ses-root"]);
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 3, removed: 2 });
+      expect(source.fleet()?.root.lines).toStrictEqual({ added: 3, removed: 2, files: 1 });
     });
   });
 
@@ -688,7 +742,7 @@ describe("createFleetSource lines", () => {
       fake.addMessage("ses-root", makeAssistant({ created: 200 }));
       await flush();
       expect(fake.calls.diffCalls).toHaveLength(1);
-      expect(source.fleet()?.root.lines).toStrictEqual({ added: 1, removed: 1 });
+      expect(source.fleet()?.root.lines).toStrictEqual({ added: 1, removed: 1, files: 1 });
     });
   });
 

@@ -647,6 +647,21 @@
   color: var(--bn-danger);
 }
 
+.bn-changes {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.bn-changes__files {
+  color: var(--bn-muted);
+}
+
+.bn-changes__bullet {
+  color: var(--bn-faint);
+}
+
 /*
  * Narrow priority for row 3, first to give way first: the +/- line counts
  * (they move to the details), then the metric gaps tighten, then the context
