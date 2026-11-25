@@ -1319,12 +1319,16 @@ describe("createFleetSource clock", () => {
 });
 
 describe("createFleetSource connection", () => {
-  it("marks live members unknown while disconnected and restores them on reconnect", async () => {
+  it("keeps the family total while disconnected and restores live statuses", async () => {
     const fake = createFakeHost({
       routed: "ses-root",
       sessions: [
         {
           info: makeSession({ id: "ses-root", cost: 0.5, tokens: makeTokens({ input: 10 }) }),
+          status: "running",
+        },
+        {
+          info: makeSession({ id: "ses-child", parentID: "ses-root", created: 2, cost: 0.25 }),
           status: "running",
         },
       ],
@@ -1333,6 +1337,7 @@ describe("createFleetSource connection", () => {
     await withSource(fake.host, async (source) => {
       await flush();
       expect(source.fleet()?.root.status).toBe("running");
+      expect(source.fleet()?.totalCost).toStrictEqual({ usd: 0.75, estimated: false });
 
       fake.setConnected(false);
       await flush();
@@ -1340,10 +1345,14 @@ describe("createFleetSource connection", () => {
       expect(source.fleet()?.root.statusDetail).toBeUndefined();
       expect(source.fleet()?.root.cost).toStrictEqual({ usd: 0.5, estimated: false });
       expect(source.fleet()?.root.tokens?.total).toBe(10);
+      expect(source.fleet()?.totalCost).toStrictEqual({ usd: 0.75, estimated: false });
 
       fake.setConnected(true);
       await flush();
       expect(source.fleet()?.root.status).toBe("running");
+      expect(source.fleet()?.totalCost).toStrictEqual({ usd: 0.75, estimated: false });
+      expect(fake.calls.priceFetches()).toBe(0);
+      expect(fake.calls.messageLoadMores).toStrictEqual([]);
     });
   });
 });
@@ -1391,6 +1400,41 @@ describe("createFleetSource prices", () => {
       fake.setStatus("ses-child", "running");
       await flush();
       expect(fake.calls.priceFetches()).toBe(1);
+    });
+  });
+
+  it("fetches prices for a direct child's unpriced usage", async () => {
+    const tokens = makeTokens({ input: 1_000 });
+    const model = { id: "m", providerID: "p" };
+    const fake = createFakeHost({
+      routed: "ses-root",
+      sessions: [
+        { info: makeSession({ id: "ses-root", cost: 0.4 }) },
+        {
+          info: makeSession({
+            id: "ses-child",
+            parentID: "ses-root",
+            created: 2,
+            tokens,
+            model,
+          }),
+          status: "running",
+          messages: [makeAssistant({ tokens, cost: 0, completed: 1, model })],
+        },
+      ],
+      prices: () =>
+        Promise.resolve({
+          p: { models: { m: { cost: { input: 50, output: 0 } } } },
+        } satisfies PriceTable),
+    });
+
+    await withSource(fake.host, async (source) => {
+      await flush();
+      expect(fake.calls.priceFetches()).toBe(1);
+
+      await flush();
+      expect(source.fleet()?.active[0]?.cost).toStrictEqual({ usd: 0.05, estimated: true });
+      expect(source.fleet()?.totalCost).toStrictEqual({ usd: 0.45, estimated: true });
     });
   });
 

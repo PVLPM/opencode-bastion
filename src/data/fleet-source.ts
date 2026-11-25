@@ -110,6 +110,11 @@ function scopeKey(anchor: Anchor): string {
   return `${anchor.serverID}\n${anchor.connected ? "on" : "off"}\n${anchor.rootID}`;
 }
 
+/** Family readiness survives a connection change; only the root/server move it. */
+function familyKey(anchor: Anchor): string {
+  return `${anchor.serverID}\n${anchor.rootID}`;
+}
+
 /** The SDK's location identity: directory plus workspace when present. */
 function locationKey(location: LocationRef): string {
   return location.workspaceID === undefined
@@ -282,7 +287,6 @@ export function createFleetSource(host: FleetHost): FleetSource {
     historyFailures.clear();
     backfillRoot = false;
     setHydration(undefined);
-    setFamilyReady(undefined);
     beamScope = undefined;
     beamPrevious = undefined;
     clearBeams();
@@ -335,8 +339,17 @@ export function createFleetSource(host: FleetHost): FleetSource {
       descendants,
       // A cost total is only claimed once the family sync resolved and every
       // indexed member has info; otherwise the estimate could cover less.
-      familyComplete: familyReady() === scopeKey(current) && infos.length === ids.length,
+      familyComplete: familyReady() === familyKey(current) && infos.length === ids.length,
     };
+  });
+
+  let trackedFamily: string | undefined;
+  createEffect(() => {
+    const current = anchor();
+    const key = current === undefined ? undefined : familyKey(current);
+    if (key === trackedFamily) return;
+    trackedFamily = key;
+    setFamilyReady(undefined);
   });
 
   let trackedRouted: { readonly scope: string; readonly id: string } | undefined;
@@ -374,7 +387,7 @@ export function createFleetSource(host: FleetHost): FleetSource {
       () => data.session.sync(current.rootID, { children: true }),
       () => {
         if (syncScope !== scope) return;
-        setFamilyReady(scope);
+        setFamilyReady(familyKey(current));
       },
     );
 
@@ -621,15 +634,17 @@ export function createFleetSource(host: FleetHost): FleetSource {
     if (pricesStarted) return;
     const current = family();
     if (current === undefined) return;
-    const needsEstimate = [current.root, ...current.descendants].some((info) => {
-      const tokens = tokenTotal(info.tokens);
-      if (info.cost === 0 && Number.isFinite(tokens) && tokens > 0) return true;
-      // A mixed session reports a base cost but still contains unpriced records.
-      return usageRecords(current.data.session.message.list(info.id)).some((record) => {
-        const total = tokenTotal(record.tokens);
-        return (record.cost ?? 0) === 0 && Number.isFinite(total) && total > 0;
-      });
-    });
+    const needsEstimate = [current.root, ...current.children, ...current.descendants].some(
+      (info) => {
+        const tokens = tokenTotal(info.tokens);
+        if (info.cost === 0 && Number.isFinite(tokens) && tokens > 0) return true;
+        // A mixed session reports a base cost but still contains unpriced records.
+        return usageRecords(current.data.session.message.list(info.id)).some((record) => {
+          const total = tokenTotal(record.tokens);
+          return (record.cost ?? 0) === 0 && Number.isFinite(total) && total > 0;
+        });
+      },
+    );
     if (!needsEstimate) return;
     pricesStarted = true;
     host.fetchPrices().then(
