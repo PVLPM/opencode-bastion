@@ -8,6 +8,7 @@ import {
   makeAssistant,
   makeError,
   makeSession,
+  makeSynthetic,
   makeTokens,
   makeTool,
   makeUser,
@@ -197,6 +198,33 @@ describe("buildFleet", () => {
     {
       name: "has no task without a user prompt",
       messages: [makeAssistant()],
+      expected: undefined,
+      expectedText: undefined,
+    },
+    {
+      name: "ignores a newer synthetic message and keeps the latest genuine prompt",
+      messages: [
+        makeUser(10, "Real task"),
+        makeSynthetic({
+          id: "msg-internal",
+          created: 20,
+          text: "Continue",
+          description: "Synthetic task",
+        }),
+      ],
+      expected: "Real task",
+      expectedText: "Real task",
+    },
+    {
+      name: "has no task when only synthetic messages exist",
+      messages: [
+        makeSynthetic({
+          id: "msg-internal",
+          created: 20,
+          text: "Continue",
+          description: "Synthetic task",
+        }),
+      ],
       expected: undefined,
       expectedText: undefined,
     },
