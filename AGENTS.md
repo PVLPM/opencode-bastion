@@ -33,6 +33,7 @@ win.
 | UI work and visual verification | `docs/agents/design.md` and `DESIGN.md` |
 | regenerating or reviewing the README demo | `docs/agents/demo.md` |
 | reviewing a change | `docs/agents/review.md` |
+| release, npm staging, GitHub release | `docs/agents/release.md` |
 
 Do not preload every playbook "just in case".
 

@@ -44,7 +44,15 @@
     "format:check": "biome format .",
     "knip": "knip",
     "dup:check": "jscpd src",
-    "verify": "pnpm format:check && pnpm lint && pnpm knip && pnpm dup:check && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm format:check && pnpm lint && pnpm knip && pnpm dup:check && pnpm typecheck && pnpm test && pnpm build",
+    "pack:release-package": "node scripts/pack-release-package.mjs",
+    "smoke:package": "node scripts/smoke-packed-package.mjs",
+    "verify:package-contents": "node scripts/verify-package-contents.mjs",
+    "verify:release-artifact": "node scripts/verify-release-artifact.mjs",
+    "verify:release-package": "node scripts/verify-release-package.mjs",
+    "verify:release-version": "node scripts/verify-release-version.mjs",
+    "release:check": "pnpm verify && pnpm run verify:release-version",
+    "prepublishOnly": "pnpm run release:check"
   },
   "peerDependencies": {
     "@opencode/plugin": ">=2.4.0 <2.5.0"
