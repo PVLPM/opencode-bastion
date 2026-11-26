@@ -8,6 +8,7 @@ import "./preview.css";
 
 import type { Beam, FleetView, LanesView } from "../src/model/types";
 import { FleetPanel } from "../src/ui/fleet-panel";
+import { DemoScene } from "./demo/scene";
 import {
   failedFleet,
   inactiveFleet,
@@ -347,32 +348,41 @@ const recordOpen = (sessionID: string) => setOpened(sessionID);
 const host = document.getElementById("root");
 if (host === null) throw new Error("Preview root element is missing.");
 
-render(
-  () => (
-    <div class="pv-page">
-      <header class="pv-bar">
-        <div>
-          <h1>Agent Fleet</h1>
-          <p>
-            OpenCode Desktop 2.4 v2 tokens · narrow 320 and wide 560 · ?theme=light, ?motion=reduce
-          </p>
-        </div>
-        <div class="pv-bar__tools">
-          <span>
-            {opened() === undefined ? "Click a card to open its session" : `Open: ${opened()}`}
-          </span>
-          <button class="pv-action" type="button" onClick={toggleScheme}>
-            {scheme() === "dark" ? "Light theme" : "Dark theme"}
-          </button>
-          <button class="pv-action" type="button" onClick={toggleMotion}>
-            {reduced() ? "Use full motion" : "Reduce motion"}
-          </button>
-        </div>
-      </header>
-      <Show when={epoch()} keyed>
-        <Gallery onOpen={recordOpen} />
-      </Show>
-    </div>
-  ),
-  host,
-);
+if (query.get("demo") === "1") {
+  // Demo mode is dark, full motion and free of gallery chrome; the panel owns
+  // the whole surface as it does in Desktop.
+  document.documentElement.dataset.colorScheme = "dark";
+  delete document.documentElement.dataset.motion;
+  render(() => <DemoScene />, host);
+} else {
+  render(
+    () => (
+      <div class="pv-page">
+        <header class="pv-bar">
+          <div>
+            <h1>Agent Fleet</h1>
+            <p>
+              OpenCode Desktop 2.4 v2 tokens · narrow 320 and wide 560 · ?theme=light,
+              ?motion=reduce
+            </p>
+          </div>
+          <div class="pv-bar__tools">
+            <span>
+              {opened() === undefined ? "Click a card to open its session" : `Open: ${opened()}`}
+            </span>
+            <button class="pv-action" type="button" onClick={toggleScheme}>
+              {scheme() === "dark" ? "Light theme" : "Dark theme"}
+            </button>
+            <button class="pv-action" type="button" onClick={toggleMotion}>
+              {reduced() ? "Use full motion" : "Reduce motion"}
+            </button>
+          </div>
+        </header>
+        <Show when={epoch()} keyed>
+          <Gallery onOpen={recordOpen} />
+        </Show>
+      </div>
+    ),
+    host,
+  );
+}

@@ -175,3 +175,31 @@ button {
     padding: 20px 16px 48px;
   }
 }
+
+/*
+ * ?demo=1: a single native panel on the deep background, with no gallery
+ * chrome. The frame is presentation only; it never imitates host window UI.
+ */
+.pv-demo {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--v2-background-bg-deep);
+}
+
+.pv-demo__surface {
+  /* 770 px holds the six-card family, the 10 px breathing gap and the Lanes. */
+  width: 600px;
+  height: 770px;
+  overflow: hidden;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 12px;
+  background: var(--v2-background-bg-base);
+  box-shadow: 0 28px 80px -40px #000;
+}
+
+.pv-demo__surface > .bn-panel {
+  height: 100%;
+}
