@@ -1,6 +1,6 @@
 // One-command README recording: start Vite, record the ?demo=1 scene with
-// Playwright, then encode a palette GIF with ffmpeg. The scene itself lives in
-// preview/demo; nothing here drives production code.
+// Playwright, then encode the 24 fps WebP with ffmpeg. The scene itself lives
+// in preview/demo; nothing here drives production code.
 import { spawnSync } from "node:child_process";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -13,17 +13,18 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "..");
 const screens = path.join(here, ".screens", "demo");
 const videoPath = path.join(screens, "agent-fleet.webm");
-const palettePath = path.join(screens, "palette.png");
 const timingPath = path.join(screens, "timing.json");
-const gifPath = path.join(repo, "docs", "images", "agent-fleet.gif");
+const webpPath = path.join(repo, "docs", "images", "agent-fleet.webp");
 // The orchestrator is the first card, so its details stay in view at the
 // shorter surface. The finished children are ordered newest-first, which puts
 // Explorer last, where its details would be clipped.
 const ORCHESTRATOR = "ses_demo_root";
 // 770 px is the measured height that keeps all six cards and the Lanes dock
-// visible at once: 6 + 32 + 493 + 237 + 2 borders. The video adds 30 px of
-// background on every side.
+// visible at once: 6 + 32 + 493 + 237 + 2 borders.
 const VIEWPORT = { width: 800, height: 830 };
+// The 800×830 video leaves a 100 px side and 30 px vertical margin around the
+// 600×770 surface. Crop to 640×800, leaving 20 px side / 15 px vertical.
+const CROP = "crop=640:800:80:15";
 
 function run(command, args) {
   const result = spawnSync(command, args, { stdio: "inherit" });
@@ -35,12 +36,12 @@ function run(command, args) {
 
 async function fileSize(file) {
   const info = await stat(file);
-  return `${(info.size / 1024 / 1024).toFixed(2)} MB`;
+  return `${(info.size / 1_000_000).toFixed(2)} MB`;
 }
 
 await rm(screens, { recursive: true, force: true });
 await mkdir(screens, { recursive: true });
-await mkdir(path.dirname(gifPath), { recursive: true });
+await mkdir(path.dirname(webpPath), { recursive: true });
 
 const server = await createServer({
   configFile: path.join(here, "vite.config.ts"),
@@ -159,7 +160,7 @@ try {
   await page.waitForFunction(() => window.__bastionDemo?.done === true, undefined, {
     timeout: 20_000,
   });
-  // A beat of the finished panel, so the GIF does not end on the last frame of
+  // A beat of the finished panel, so the WebP does not end on the last frame of
   // the story.
   await page.waitForTimeout(800);
 
@@ -225,36 +226,27 @@ console.log(
   `video ${await fileSize(videoPath)}; trim ${trim.toFixed(2)}s; encode ${duration.toFixed(2)}s`,
 );
 
-// Two-pass palette: the first pass learns the scene's colors, the second maps
-// them with a rectangle diff so unchanged chrome costs almost nothing. The
-// trim lives in the filtergraph because palettegen emits its single frame at
-// EOF, which an output `-t` would discard.
-const cut = `fps=15,trim=start=${trim.toFixed(3)}:end=${end.toFixed(3)},setpts=PTS-STARTPTS,scale=800:830:flags=lanczos`;
+// One pass: 24 fps, cropped to the panel surface, and q90 with millisecond
+// frame timing. The flat margins cost almost nothing to encode; the crop is
+// for the tighter README framing, not for size. q90 is the measured
+// size/clarity point for the 12 px UI text.
+const cut = `fps=24,trim=start=${trim.toFixed(3)}:end=${end.toFixed(3)},setpts=PTS-STARTPTS,${CROP}`;
 run("ffmpeg", [
   "-y",
   "-i",
   videoPath,
   "-an",
   "-vf",
-  `${cut},palettegen=stats_mode=diff:max_colors=128`,
-  "-frames:v",
-  "1",
-  "-update",
-  "1",
-  palettePath,
-]);
-run("ffmpeg", [
-  "-y",
-  "-i",
-  videoPath,
-  "-i",
-  palettePath,
-  "-an",
-  "-lavfi",
-  `${cut}[x];[x][1:v]paletteuse=dither=none:diff_mode=rectangle`,
+  cut,
+  "-c:v",
+  "libwebp_anim",
+  "-quality",
+  "90",
+  "-compression_level",
+  "6",
   "-loop",
   "0",
-  gifPath,
+  webpPath,
 ]);
 
 const probe = spawnSync(
@@ -268,10 +260,10 @@ const probe = spawnSync(
     "stream=width,height,avg_frame_rate,nb_frames:format=duration,size",
     "-of",
     "json",
-    gifPath,
+    webpPath,
   ],
   { encoding: "utf8" },
 );
 if (probe.status !== 0) throw new Error(probe.stderr);
 console.log(probe.stdout.trim());
-console.log(`gif ${await fileSize(gifPath)} at ${gifPath}`);
+console.log(`webp ${await fileSize(webpPath)} at ${webpPath}`);

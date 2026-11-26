@@ -1,6 +1,6 @@
 # README demo
 
-`docs/images/agent-fleet.gif` is a recorded run of the real Fleet panel. The
+`docs/images/agent-fleet.webp` is a recorded run of the real Fleet panel. The
 sessions are synthetic; the cards, statuses, activity, costs, context, beams and
 Agent Lanes are the production UI and model. Nothing in `src/` is demo-specific.
 
@@ -13,9 +13,9 @@ Prerequisites:
 - Node `>=22.18.0` and pnpm `10.33.0`, as declared in `package.json`.
 - `pnpm install`.
 - `pnpm exec playwright install chromium`, once per machine.
-- `ffmpeg` and `ffprobe` on `PATH`.
+- `ffmpeg` (with libwebp) and `ffprobe` on `PATH`.
 - `preview/fonts/Inter.ttf` and `Inter-Italic.ttf` (OFL, gitignored). The recorder
-  stops if Inter is missing because the GIF is captured with the real preview
+  stops if Inter is missing because the WebP is captured with the real preview
   font; a fresh clone falls back to the system sans stack.
 
 ```sh
@@ -23,7 +23,7 @@ pnpm demo:record
 ```
 
 The script starts Vite on `localhost:5199`, records `/?demo=1` with Playwright,
-and encodes the GIF with ffmpeg. Raw video, palette and timing files go to
+and encodes the WebP with ffmpeg. Raw video and timing files go to
 `preview/.screens/demo/` and stay uncommitted. It exits non-zero on a page error,
 missing Inter, a non-done final state, a detail panel that does not fit, or an
 encoder failure.
@@ -60,25 +60,25 @@ deterministic; frame timing may vary by a frame.
 - `preview/preview.css` owns the recording frame: `.pv-demo__surface` is
   `600 × 770`.
 - `preview/record-demo.mjs` owns the capture: `800 × 830` viewport and video,
-  Orchestrator details, hold timings, and the ffmpeg scale, frame rate and
-  palette. If the frame height changes, update all four places (surface,
-  viewport, `recordVideo.size`, ffmpeg `scale`) and re-check that the six cards
-  plus the Lanes still fit.
+  Orchestrator details, hold timings, and the `640 × 800` crop, 24 fps and q90
+  WebP settings. If the frame height changes, update all four places (surface,
+  viewport, `recordVideo.size`, `CROP`) and re-check that the six cards plus the
+  Lanes still fit.
 - `770 px` is the smallest height that keeps all six cards visible with a 10 px
   gap above the Lanes. Do not lower it without measuring the final Explorer card.
 - The details target is the Orchestrator because it is the first card and always
   visible; finished children are newest-first, so Explorer is last at the end.
-- The GIF is committed as a product asset. `preview/.screens/` is not.
+- The WebP is committed as a product asset. `preview/.screens/` is not.
 
-## Review the encoded GIF
+## Review the encoded WebP
 
 ```sh
-ffmpeg -i docs/images/agent-fleet.gif \
+ffmpeg -i docs/images/agent-fleet.webp \
   -vf "fps=1/2.1,scale=360:-1:flags=lanczos,tile=4x4:padding=4:margin=4" \
   -frames:v 1 preview/.screens/demo/contact.png
 ```
 
-Inspect the encoded GIF, not only the live page or the webm:
+Inspect the encoded WebP, not only the live page or the webm:
 
 - 1:1 text clarity at the waiting, details and final frames; no clipping or
   unintended scrollbars.
@@ -88,3 +88,7 @@ Inspect the encoded GIF, not only the live page or the webm:
 - Rolling token and cost digits during the parallel phase.
 - Finished-group order and the Orchestrator Done check in the final state.
 - The completed hold before the loop.
+
+The committed demo is 24 fps, 640 × 800, q90: 687 encoded frames over 33.08 s,
+7.18 MB. q95 is sharper but 10.30 MB; q90 is the approved size/clarity point.
+Do not change the quality without re-checking the size and 1:1 text.

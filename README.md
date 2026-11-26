@@ -7,7 +7,7 @@ changed lines — without leaving the conversation.
 Requires OpenCode Desktop 2.4.x. Read-only: Bastion never starts, stops, approves
 or answers anything.
 
-![Animated Agent Fleet: six agents with delegation beams, a waiting agent, a failure and retry, a follow-up execution, and Agent Lanes](docs/images/agent-fleet.gif)
+![Animated Agent Fleet: six agents with delegation beams, a waiting agent, a failure and retry, a follow-up execution, and Agent Lanes](https://raw.githubusercontent.com/PVLPM/opencode-bastion/main/docs/images/agent-fleet.webp)
 
 ## Features
 
