@@ -704,13 +704,13 @@ type BlockSpec = readonly [
   start: number,
   end: number | undefined,
   status: AgentStatus,
-  label?: string,
+  label: string | undefined,
 ];
 
 interface LaneSpec {
   readonly sessionID: string;
   readonly agent: string;
-  readonly title?: string;
+  readonly title: string | undefined;
   readonly root?: boolean;
   /** Seconds relative to `base`; an absent end is a live execution. */
   readonly blocks: readonly BlockSpec[];
@@ -1066,16 +1066,24 @@ export function liveLanes(startedAt: number, now: number): LanesView {
   return buildLanes(
     startedAt,
     [
-      { sessionID: "ses_live_root", agent: "Orchestrator", root: true, blocks: root },
+      {
+        sessionID: "ses_live_root",
+        agent: "Orchestrator",
+        title: undefined,
+        root: true,
+        blocks: root,
+      },
       {
         sessionID: "ses_live_research",
         agent: "Researcher",
+        title: undefined,
         blocks: [[-43.5, undefined, "running", "Compare five competitors"]],
       },
-      { sessionID: "ses_live_writer", agent: "Writer", blocks: writer },
+      { sessionID: "ses_live_writer", agent: "Writer", title: undefined, blocks: writer },
       {
         sessionID: "ses_live_verify",
         agent: "Verifier",
+        title: undefined,
         blocks: [[-30.5, undefined, "waiting", "Check the checkout flow end to end"]],
       },
     ],
