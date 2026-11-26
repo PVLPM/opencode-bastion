@@ -7,6 +7,8 @@ changed lines — without leaving the conversation.
 Requires OpenCode Desktop 2.4.x. Read-only: Bastion never starts, stops, approves
 or answers anything.
 
+![Animated Agent Fleet: six agents with delegation beams, a waiting agent, a failure and retry, a follow-up execution, and Agent Lanes](docs/images/agent-fleet.gif)
+
 ## Features
 
 - **Agent Status pill** above the composer once the session has delegated work:

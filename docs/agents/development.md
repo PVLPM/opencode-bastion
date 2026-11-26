@@ -81,6 +81,9 @@ Useful URLs and controls:
 - The **Live activity** scene animates a running agent, fires delegation and
   result beams, and has buttons to advance the activity line, fire a beam or
   replay the lanes.
+- `?demo=1` opens the README recording scene: one panel, no gallery chrome, dark
+  and full motion. `pnpm demo:record` regenerates `docs/images/agent-fleet.gif`;
+  see `docs/agents/demo.md`.
 
 Preview limitations, so you do not chase ghosts:
 

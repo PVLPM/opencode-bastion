@@ -31,6 +31,7 @@ win.
 | setup, build, preview gallery, loading the plugin | `docs/agents/development.md` |
 | tests, fixtures, fake host, regressions | `docs/agents/testing.md` |
 | UI work and visual verification | `docs/agents/design.md` and `DESIGN.md` |
+| regenerating or reviewing the README demo | `docs/agents/demo.md` |
 | reviewing a change | `docs/agents/review.md` |
 
 Do not preload every playbook "just in case".
